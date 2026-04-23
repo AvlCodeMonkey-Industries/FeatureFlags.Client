@@ -1,6 +1,6 @@
 using Microsoft.FeatureManagement;
 
-namespace FeatureFlags.Client;
+namespace Acmi.FeatureFlags.Client;
 
 /// <summary>
 /// Interface for a client that retrieves feature flag definitions from a remote service.

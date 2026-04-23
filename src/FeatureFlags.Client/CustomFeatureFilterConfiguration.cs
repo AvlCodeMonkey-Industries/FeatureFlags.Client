@@ -1,4 +1,4 @@
-namespace FeatureFlags.Client;
+namespace Acmi.FeatureFlags.Client;
 
 /// <summary>
 /// Custom version of FeatureFilterConfiguration that can be deserialized from JSON.

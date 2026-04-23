@@ -5,7 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.FeatureManagement;
 using Moq;
 
-namespace FeatureFlags.Client.Tests;
+namespace Acmi.FeatureFlags.Client.Tests;
 
 public class ExtensionsTests {
     [Fact]

@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.Protected;
 
-namespace FeatureFlags.Client.Tests;
+namespace Acmi.FeatureFlags.Client.Tests;
 
 public class HttpFeatureFlagClientTests {
     [Fact]

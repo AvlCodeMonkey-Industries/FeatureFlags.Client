@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
 
-namespace FeatureFlags.Client;
+namespace Acmi.FeatureFlags.Client;
 
 /// <summary>
 /// A feature filter that can be used to activate a feature based on a random percentage.

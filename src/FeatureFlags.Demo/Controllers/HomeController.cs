@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using FeatureFlags.Client;
+using Acmi.FeatureFlags.Client;
 using FeatureFlags.Demo.Models;
 using Microsoft.AspNetCore.Mvc;
 

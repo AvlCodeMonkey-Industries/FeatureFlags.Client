@@ -1,6 +1,6 @@
 using Microsoft.FeatureManagement;
 
-namespace FeatureFlags.Client;
+namespace Acmi.FeatureFlags.Client;
 
 /// <summary>
 /// Provides feature definitions by interacting with a feature flag client.

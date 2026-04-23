@@ -1,6 +1,6 @@
 using Microsoft.FeatureManagement;
 
-namespace FeatureFlags.Client.Tests;
+namespace Acmi.FeatureFlags.Client.Tests;
 
 public class FeatureDefinitionMapperTests {
     [Fact]

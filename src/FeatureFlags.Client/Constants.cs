@@ -1,4 +1,4 @@
-namespace FeatureFlags.Client;
+namespace Acmi.FeatureFlags.Client;
 
 /// <summary>
 /// Magic strings used throughout the feature flags client.

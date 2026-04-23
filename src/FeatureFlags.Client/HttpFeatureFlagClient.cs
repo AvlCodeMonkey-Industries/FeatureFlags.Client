@@ -4,7 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.FeatureManagement;
 
-namespace FeatureFlags.Client;
+namespace Acmi.FeatureFlags.Client;
 
 /// <inheritdoc />
 public class HttpFeatureFlagClient(IHttpClientFactory httpClientFactory, IConfiguration configuration, IMemoryCache memoryCache, ILogger<HttpFeatureFlagClient> logger) : IFeatureFlagClient {

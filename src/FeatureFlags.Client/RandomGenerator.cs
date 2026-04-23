@@ -1,4 +1,4 @@
-namespace FeatureFlags.Client;
+namespace Acmi.FeatureFlags.Client;
 
 /// <summary>
 /// Provides thread-safe generation of random numbers.

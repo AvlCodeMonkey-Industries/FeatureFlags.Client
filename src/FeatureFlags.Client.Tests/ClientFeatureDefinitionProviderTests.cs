@@ -1,7 +1,7 @@
 using Microsoft.FeatureManagement;
 using Moq;
 
-namespace FeatureFlags.Client.Tests;
+namespace Acmi.FeatureFlags.Client.Tests;
 
 public class ClientFeatureDefinitionProviderTests {
     private readonly Mock<IFeatureFlagClient> _FeatureFlagClientMock;

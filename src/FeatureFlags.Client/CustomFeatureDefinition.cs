@@ -1,6 +1,6 @@
 using Microsoft.FeatureManagement;
 
-namespace FeatureFlags.Client;
+namespace Acmi.FeatureFlags.Client;
 
 /// <summary>
 /// Represents the definition of a feature, including its name, status, filters, and configuration details.

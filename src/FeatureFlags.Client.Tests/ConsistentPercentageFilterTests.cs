@@ -5,7 +5,7 @@ using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
 using Moq;
 
-namespace FeatureFlags.Client.Tests;
+namespace Acmi.FeatureFlags.Client.Tests;
 
 public class ConsistentPercentageFilterTests {
     [Theory]

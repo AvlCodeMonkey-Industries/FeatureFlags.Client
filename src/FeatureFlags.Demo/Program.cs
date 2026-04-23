@@ -1,4 +1,4 @@
-using FeatureFlags.Client;
+using Acmi.FeatureFlags.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 

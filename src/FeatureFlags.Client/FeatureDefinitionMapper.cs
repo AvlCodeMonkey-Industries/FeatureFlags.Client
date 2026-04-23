@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.FeatureManagement;
 
-namespace FeatureFlags.Client;
+namespace Acmi.FeatureFlags.Client;
 
 /// <summary>
 /// Provides methods for converting custom feature definitions.
