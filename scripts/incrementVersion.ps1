@@ -25,7 +25,7 @@ if ($localHash -ne $remoteHash) {
 
 $projFile = "$PSScriptRoot/../src/FeatureFlags.Client/FeatureFlags.Client.csproj"
 [xml]$projFileXml = Get-Content $projFile
-$fileVersion = [version]$projFileXml.Project.PropertyGroup[0].AssemblyVersion
+$fileVersion = [version]$projFileXml.Project.PropertyGroup.AssemblyVersion
 
 if ($Major) {
     $version = "{0}.{1}.{2}.{3}" -f ($fileVersion.Major + 1), 0, 0, 0
@@ -38,7 +38,7 @@ if ($Major) {
 }
 
 if (!$DryRun) {
-    $projFileXml.Project.PropertyGroup[0].AssemblyVersion = $version
+    $projFileXml.Project.PropertyGroup.AssemblyVersion = $version
     $projFileXml.save($projFile)
 }
 
