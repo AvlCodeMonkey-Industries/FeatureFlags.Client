@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>Acmi.FeatureFlags.Client</RootNamespace>
+    <Product>Acmi.FeatureFlags.Client</Product>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ReportAnalyzer>true</ReportAnalyzer>
