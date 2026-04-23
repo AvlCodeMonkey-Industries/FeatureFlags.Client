@@ -1,0 +1,36 @@
+version: 2
+updates:
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # DotNet SDK
+  - package-ecosystem: "dotnet-sdk"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday" # updates are mostly released on Tuesday
+    cooldown:
+      default-days: 7
+    groups:
+      dotnet:
+        patterns: ["*"]
+
+  # DotNet
+  - package-ecosystem: "nuget"
+    # Look for a solution file in this directory
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      nuget:
+        patterns: ["*"]

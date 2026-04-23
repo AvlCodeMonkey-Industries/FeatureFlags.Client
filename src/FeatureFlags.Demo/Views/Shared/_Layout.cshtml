@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - FeatureFlags.Demo</title>
+	<link rel="stylesheet" href="https://unpkg.com/simpledotcss/simple.min.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <a asp-area="" asp-controller="Home" asp-action="Index">FeatureFlags.Demo</a>
+            <a asp-area="" asp-controller="Home" asp-action="Index">Home</a>
+            <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
+        </nav>
+    </header>
+
+    <main role="main">
+        @RenderBody()
+    </main>
+
+    <footer>
+        &copy; 2025 - FeatureFlags.Demo - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
+    </footer>
+</body>
+</html>
