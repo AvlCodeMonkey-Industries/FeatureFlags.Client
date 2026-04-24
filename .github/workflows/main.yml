@@ -65,9 +65,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-client, scan]
     permissions:
-      # Give the default GITHUB_TOKEN write permission to commit version change and push packages
+      # Give the default GITHUB_TOKEN write permission to commit version change
       contents: write
-      packages: write
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && success() }}
 
     steps:
@@ -101,4 +100,4 @@ jobs:
         git push
 
     - name: Push NuGet Package
-      run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/avlcodemonkey/index.json --skip-duplicate
+      run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
