@@ -21,8 +21,7 @@ jobs:
     - name: Setup DotNet
       uses: actions/setup-dotnet@v5
       with:
-        dotnet-version: 10.x
-        dotnet-quality: ga
+        global-json-file: global.json
         cache: true
         cache-dependency-path: src/**/packages.lock.json
 
@@ -73,10 +72,23 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
+    - name: Setup DotNet
+      uses: actions/setup-dotnet@v5
+      with:
+        global-json-file: global.json
+        cache: true
+        cache-dependency-path: src/**/packages.lock.json
+
+    - name: Restore DotNet dependencies
+      run: dotnet restore --locked-mode
+
     - name: Increment Version
       shell: pwsh
       run: |
         ./scripts/incrementVersion.ps1
+
+    - name: Pack NuGet Package
+      run: dotnet pack src/FeatureFlags.Client/FeatureFlags.Client.csproj --configuration Release --output ./nupkg
 
     - name: Commit Version
       run: |
@@ -86,3 +98,6 @@ jobs:
         git add src/FeatureFlags.Client/FeatureFlags.Client.csproj
         git commit -m "Automated version update [skip ci]"
         git push
+
+    # - name: Push NuGet Package
+    #  run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
