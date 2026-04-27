@@ -13,7 +13,6 @@ If you want a hosted flag-management UI and API, start at https://featureflags.a
 - [Cache Behavior](#cache-behavior)
 - [Filter Support](#filter-support)
 - [Failure Semantics](#failure-semantics)
-- [Technical Notes](#technical-notes)
 - [Common Issues And Fixes](#common-issues-and-fixes)
 - [Local Validation](#local-validation)
 - [Related References](#related-references)
