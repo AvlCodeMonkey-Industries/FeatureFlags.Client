@@ -22,7 +22,6 @@ If you want a hosted flag-management UI and API, start at https://featureflags.a
 
 - Registers feature management services in ASP.NET Core via a single `AddFeatureFlags()` call.
 - Fetches feature definitions from a remote API using an API key header (`x-api-key`).
-- Caches definitions in memory (15 minutes by default) to avoid calling the API on every evaluation.
 - Exposes `IFeatureManager`/`IFeatureManagerSnapshot` usage patterns you already know from `Microsoft.FeatureManagement`.
 - Includes a deterministic percentage filter (`FeatureFlags.ConsistentPercentage`) and targeting support.
 
@@ -38,7 +37,7 @@ If you want a hosted flag-management UI and API, start at https://featureflags.a
 ### 1. Install package
 
 ```bash
-dotnet add package FeatureFlags.Client
+dotnet add package Acmi.FeatureFlags.Client
 ```
 
 ### 2. Register services in `Program.cs`
@@ -178,21 +177,7 @@ Fix:
 - Add both required keys to configuration.
 - Confirm environment-specific config is loaded (`appsettings.{Environment}.json`, user secrets, env vars).
 
-### 2. 404 or wrong endpoint calls
-
-Symptom:
-
-- Client appears to call wrong URL.
-
-Fix:
-
-- Ensure `ApiBaseEndpoint` includes `/api/` and trailing slash.
-- Correct: `https://featureflags.app/api/`
-- Risky: `https://featureflags.app/api`
-
-Without trailing slash, relative URI handling can produce a different final path than you expect.
-
-### 3. Flags always evaluate to false
+### 2. Flags always evaluate to false
 
 Possible causes:
 
@@ -206,7 +191,7 @@ Fix:
 - Check app logs for "Error fetching feature definitions".
 - Centralize flag names in constants to avoid string-literal drift.
 
-### 4. Rollout percentages look random per request
+### 3. Rollout percentages look random per request
 
 Cause:
 
@@ -217,7 +202,7 @@ Fix:
 - Ensure authenticated identity with stable `User.Identity.Name`.
 - If anonymous traffic dominates, choose filter strategy accordingly.
 
-### 5. Flag updates not visible immediately
+### 4. Flag updates not visible immediately
 
 Cause:
 
@@ -258,8 +243,8 @@ dotnet run --project src/FeatureFlags.Demo/FeatureFlags.Demo.csproj
 
 If something breaks, behaves strangely, or just insults your architecture choices:
 
-- Browse/search issues: https://github.com/avlcodemonkey/FeatureFlags.Client/issues
-- Open a new issue: https://github.com/avlcodemonkey/FeatureFlags.Client/issues/new
+- Browse/search issues: https://github.com/avlcodemonkey-industries/FeatureFlags.Client/issues
+- Open a new issue: https://github.com/avlcodemonkey-industries/FeatureFlags.Client/issues/new
 
 Include:
 
