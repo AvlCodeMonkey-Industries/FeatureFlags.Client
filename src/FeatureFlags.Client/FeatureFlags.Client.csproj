@@ -22,6 +22,6 @@
     <PackageReference Include="Microsoft.FeatureManagement.AspNetCore" Version="4.5.0" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="README.md" Pack="true" PackagePath="\"/>
+    <None Include="README.md" Pack="true" PackagePath="../../"/>
   </ItemGroup>
 </Project>
