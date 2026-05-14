@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".github/workflows/main.yml" />
+  </Folder>
   <Project Path="src/FeatureFlags.Client.Tests/FeatureFlags.Client.Tests.csproj" />
   <Project Path="src/FeatureFlags.Client/FeatureFlags.Client.csproj" />
   <Project Path="src/FeatureFlags.Demo/FeatureFlags.Demo.csproj" />
