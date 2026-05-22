@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Acmi.FeatureFlags.Client</RootNamespace>
     <Product>Acmi.FeatureFlags.Client</Product>
-    <AssemblyVersion>1.0.0.11</AssemblyVersion>
+    <AssemblyVersion>1.0.0.12</AssemblyVersion>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ReportAnalyzer>true</ReportAnalyzer>
