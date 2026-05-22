@@ -27,7 +27,7 @@ If you want a hosted flag-management UI and API, start at https://featureflags.a
 
 ## Package And Runtime
 
-- Package: `Acmi.FeatureFlags.Client`
+- Package: [`Acmi.FeatureFlags.Client`](https://www.nuget.org/packages/Acmi.FeatureFlags.Client/)
 - Namespace: `Acmi.FeatureFlags.Client`
 - Target framework: `net10.0`
 - Core dependency: `Microsoft.FeatureManagement.AspNetCore`
@@ -138,8 +138,8 @@ public class AdminController : Controller {
 Service registration wires up:
 
 - `AddScopedFeatureManagement()`
-- `.WithTargeting()`
 - `.AddFeatureFilter<ConsistentPercentageFilter>()`
+- `.WithTargeting()`
 
 ### Consistent percentage filter
 
