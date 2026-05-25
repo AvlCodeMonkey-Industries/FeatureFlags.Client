@@ -66,29 +66,15 @@ jobs:
     needs: [build-client, scan]
     permissions:
       contents: write  # Give the default GITHUB_TOKEN write permission to commit version change
-      id-token: write  # enable GitHub OIDC token issuance for this job
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && success() }}
 
     steps:
     - uses: actions/checkout@v6
 
-    - name: Setup DotNet
-      uses: actions/setup-dotnet@v5
-      with:
-        global-json-file: global.json
-        cache: true
-        cache-dependency-path: src/**/packages.lock.json
-
-    - name: Restore DotNet dependencies
-      run: dotnet restore --locked-mode
-
     - name: Increment Version
       shell: pwsh
       run: |
         ./scripts/incrementVersion.ps1
-
-    - name: Pack NuGet Package
-      run: dotnet pack src/FeatureFlags.Client/FeatureFlags.Client.csproj --configuration Release --output ./nupkg
 
     - name: Commit Version
       run: |
@@ -98,14 +84,3 @@ jobs:
         git add src/FeatureFlags.Client/FeatureFlags.Client.csproj
         git commit -m "Automated version update [skip ci]"
         git push
-
-    # Get a short-lived NuGet API key
-    - name: NuGet login
-      uses: NuGet/login@v1
-      id: login
-      with:
-        user: ${{ secrets.NUGET_USER }}
-
-    # Push the package
-    - name: NuGet push
-      run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{steps.login.outputs.NUGET_API_KEY}} --source https://api.nuget.org/v3/index.json --skip-duplicate
