@@ -1,6 +1,6 @@
-# FeatureFlags.Client
+# FeatureFlags.app
 
-`FeatureFlags.Client` is a .NET client library that plugs into `Microsoft.FeatureManagement` and loads feature definitions from a remote FeatureFlags API.
+`FeatureFlags.app` is a cloud based feature flag management solution. It provides a simple, performant, and easy to use system for managing feature flags. Designed to work with Microsoft's feature management libraries, it easily integrates with .NET applications.
 
 If you want a hosted flag-management UI and API, start at https://featureflags.app. If you want details first and vibes later, keep reading.
 
