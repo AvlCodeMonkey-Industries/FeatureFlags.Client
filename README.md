@@ -23,7 +23,7 @@ If you want a hosted flag-management UI and API, start at https://featureflags.a
 - Registers feature management services in ASP.NET Core via a single `AddFeatureFlags()` call.
 - Fetches feature definitions from a remote API using an API key header (`x-api-key`).
 - Exposes `IFeatureManager`/`IFeatureManagerSnapshot` usage patterns you already know from `Microsoft.FeatureManagement`.
-- Includes a deterministic percentage filter (`FeatureFlags.ConsistentPercentage`) and targeting support.
+- Includes a deterministic percentage filter (`Acmi.FeatureFlags.ConsistentPercentage`) and targeting support.
 
 ## Package And Runtime
 
