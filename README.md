@@ -1,6 +1,6 @@
 # FeatureFlags.app
 
-Deploy anytime. Release when you're ready. FeatureFlags.app gives .NET developers cloud-agnostic feature management with no user tracking, no vendor lock-in, and seamless Microsoft integration. Built for Modern .NET Applications, it's the perfect solution for development teams seeking a simple, no-frills feature flag management system.
+Deploy anytime. Release when you're ready. FeatureFlags.app gives .NET developers cloud-agnostic feature management with no user tracking, no vendor lock-in, and seamless Microsoft integration. Built for Modern .NET Applications, it's the perfect solution for development teams seeking a simple, no-frills feature flag management system. FeatureFlags.Client is the client library that integrates your application with FeatureFlags.app.
 
 Get started at https://featureflags.app, or if you want details first and vibes later, keep reading.
 
