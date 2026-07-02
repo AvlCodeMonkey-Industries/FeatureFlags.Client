@@ -1,8 +1,8 @@
 # FeatureFlags.app
 
-`FeatureFlags.app` is a cloud based feature flag management solution. It provides a simple, performant, and easy to use system for managing feature flags. Designed to work with Microsoft's feature management libraries, it easily integrates with .NET applications.
+Deploy anytime. Release when you're ready. FeatureFlags.app gives .NET developers cloud-agnostic feature management with no user tracking, no vendor lock-in, and seamless Microsoft integration. Built for Modern .NET Applications, it's the perfect solution for development teams seeking a simple, no-frills feature flag management system.
 
-If you want a hosted flag-management UI and API, start at https://featureflags.app. If you want details first and vibes later, keep reading.
+Get started at https://featureflags.app, or if you want details first and vibes later, keep reading.
 
 ## Contents
 
@@ -21,7 +21,7 @@ If you want a hosted flag-management UI and API, start at https://featureflags.a
 ## What This Library Does
 
 - Registers feature management services in ASP.NET Core via a single `AddFeatureFlags()` call.
-- Fetches feature definitions from a remote API using an API key header (`x-api-key`).
+- Fetches feature definitions from our API using an API key header (`x-api-key`).
 - Exposes `IFeatureManager`/`IFeatureManagerSnapshot` usage patterns you already know from `Microsoft.FeatureManagement`.
 - Includes a deterministic percentage filter (`Acmi.FeatureFlags.ConsistentPercentage`) and targeting support.
 
@@ -78,15 +78,15 @@ Optional key:
 
 ## Using Flags In Code
 
-Use `IFeatureManager` exactly like standard Microsoft feature management.
+Use `IFeatureManagerSnapshot` exactly like standard Microsoft feature management.
 
 ```csharp
 using Microsoft.FeatureManagement;
 
 public class ProductController : Controller {
-	private readonly IFeatureManager _featureManager;
+	private readonly IFeatureManagerSnapshot _featureManager;
 
-	public ProductController(IFeatureManager featureManager) {
+	public ProductController(IFeatureManagerSnapshot featureManager) {
 		_featureManager = featureManager;
 	}
 
@@ -241,7 +241,7 @@ dotnet run --project src/FeatureFlags.Demo/FeatureFlags.Demo.csproj
 
 ## Support And Issue Tracking
 
-If something breaks, behaves strangely, or just insults your architecture choices:
+If something breaks or behaves strangely:
 
 - Browse/search issues: https://github.com/avlcodemonkey-industries/FeatureFlags.Client/issues
 - Open a new issue: https://github.com/avlcodemonkey-industries/FeatureFlags.Client/issues/new
@@ -254,4 +254,4 @@ Include:
 - Relevant logs/exceptions
 - Repro steps
 
-That gives maintainers a chance to help quickly instead of reenacting a distributed systems detective novel.
+That gives maintainers a chance to help quickly instead of reenacting a detective novel.
