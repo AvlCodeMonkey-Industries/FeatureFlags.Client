@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Acmi.FeatureFlags.Client" Version="1.0.0.14" />
+    <PackageReference Include="Acmi.FeatureFlags.Client" Version="1.0.0.25" />
   </ItemGroup>
 
 </Project>
