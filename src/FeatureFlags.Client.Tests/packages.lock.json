@@ -162,8 +162,8 @@
       },
       "Microsoft.FeatureManagement": {
         "type": "Transitive",
-        "resolved": "4.5.0",
-        "contentHash": "9VBxTZUwna9x31+OmOyX0DTBGEuvVrV81fAZ/XRkLESuDu5EZn/o6W8454NWOPHBIUyTGTMpYOFzI8ArkCNmCg==",
+        "resolved": "4.6.0",
+        "contentHash": "kLjGgEhlzuKs6t7g8so1dqsmE5NaSURNPOWkKD056nF43G/6w/VK5Gd02WKgpuBRQ9mjl7odAe462bn3XKBXmg==",
         "dependencies": {
           "Microsoft.Bcl.TimeProvider": "8.0.1",
           "Microsoft.Extensions.Caching.Memory": "8.0.1",
@@ -174,10 +174,10 @@
       },
       "Microsoft.FeatureManagement.AspNetCore": {
         "type": "Transitive",
-        "resolved": "4.5.0",
-        "contentHash": "CafI8Ne0xuXRNzHMoRGAX4WRvLxpTE7RceBncgME/fRcPD2KwYrxfZpLyJ/kVfYt8uvHkC2xy0VlStj687mVoA==",
+        "resolved": "4.6.0",
+        "contentHash": "+0G11gpuGqggJ7nrB7jL/oT4bsRVqnM5q6+qgC5sO2oW4JWymXoUAkDNsuLsMB9La9Ota248x8dwhoL2erImwQ==",
         "dependencies": {
-          "Microsoft.FeatureManagement": "4.5.0"
+          "Microsoft.FeatureManagement": "4.6.0"
         }
       },
       "Microsoft.Testing.Extensions.Telemetry": {
@@ -309,7 +309,7 @@
       "Acmi.FeatureFlags.Client": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.FeatureManagement.AspNetCore": "[4.5.0, )"
+          "Microsoft.FeatureManagement.AspNetCore": "[4.6.0, )"
         }
       }
     }
