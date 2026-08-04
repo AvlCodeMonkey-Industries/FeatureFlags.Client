@@ -16,7 +16,7 @@ jobs:
       contents: read
 
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
 
     - name: Setup DotNet
       uses: actions/setup-dotnet@v6.0.0
@@ -52,7 +52,7 @@ jobs:
     if: github.ref_name != 'main' && github.head_ref != 'main'
 
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
 
@@ -71,7 +71,7 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && success() }}
 
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
 
     - name: Increment Version
       shell: pwsh
