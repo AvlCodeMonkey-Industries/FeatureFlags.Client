@@ -35,7 +35,7 @@ jobs:
       run: dotnet build --no-restore --configuration Release
 
     - name: Test DotNet
-      run: dotnet test --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx"
+      run: dotnet test --no-build --configuration Release --verbosity normal -- --report-trx --report-trx-filename "test-results.trx"
 
     - name: Report Test Results
       uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
