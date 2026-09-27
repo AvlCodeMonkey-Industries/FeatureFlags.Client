@@ -13,5 +13,4 @@
 
 *.js       text eol=crlf
 *.mjs      text eol=crlf
-*.json     text eol=crlf
 *.css      text eol=crlf
