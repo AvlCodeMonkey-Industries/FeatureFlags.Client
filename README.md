@@ -111,12 +111,12 @@ Also works with the normal ASP.NET Core feature management integrations:
 `AddFeatureFlags()` registers a hosted background service (`FeatureDefinitionRefreshService`) that keeps an in-memory snapshot of all feature definitions.
 
 - Definitions are fetched at startup. Startup waits up to 5 seconds for the first fetch, then continues without it.
-- They are refreshed every `CacheExpirationInMinutes` (default: `15`).
+- After each refresh completes, the next periodic refresh starts after `CacheExpirationInMinutes` (default: `15`); requests time out after 30 seconds.
 - Flag checks read the current snapshot. Evaluation never waits on an HTTP call.
 - The snapshot is swapped atomically after each successful refresh.
 - If a refresh fails (timeout, network error, 5xx, 401/403), the last-known-good snapshot stays in place and the next refresh is retried on the next tick.
 - `IFeatureFlagClient.ClearCache()` requests an immediate background refresh. The old snapshot stays in place until that refresh succeeds. The method name is kept for compatibility.
-- Flag changes reach your app within your refresh interval (15 minutes by default). Use a shorter interval for apps that rely on kill-switch flags.
+- Flag changes typically reach your app within the configured interval plus the time taken by the next refresh (up to 30 seconds), assuming the API responds successfully. Use a shorter interval for apps that rely on kill-switch flags.
 
 Example:
 
@@ -209,7 +209,7 @@ Fix:
 
 Cause:
 
-- Definitions refresh in the background every `CacheExpirationInMinutes` (15 by default), so a change shows up within that interval.
+- After each refresh completes, the next periodic refresh starts after `CacheExpirationInMinutes` (15 by default). A change may take that interval plus the time taken by the next refresh (up to 30 seconds) to show up.
 
 Fix:
 
