@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -60,7 +59,8 @@ public class ExtensionsTests {
         Assert.Same(builderMock.Object, result);
         Assert.Contains(services, s => s.ServiceType == typeof(IFeatureFlagClient));
         Assert.Contains(services, s => s.ServiceType == typeof(IFeatureDefinitionProvider));
-        Assert.Contains(services, s => s.ServiceType == typeof(IMemoryCache));
+        Assert.Contains(services, s => s.ServiceType == typeof(FeatureDefinitionRefreshService));
+        Assert.Contains(services, s => s.ServiceType == typeof(IHostedService) && s.ImplementationFactory is not null);
         Assert.Contains(services, s => s.ServiceType == typeof(IHttpClientFactory));
 
         // Build the service provider and get the factory

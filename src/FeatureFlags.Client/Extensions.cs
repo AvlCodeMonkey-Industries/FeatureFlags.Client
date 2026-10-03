@@ -16,7 +16,7 @@ public static class Extensions {
     /// configuration (using the keys <c>FeatureFlags:ApiBaseEndpoint</c> and <c>FeatureFlags:ApiKey</c>, respectively).
     /// If either value is missing or invalid, an <see cref="ArgumentException"/> is thrown.  The method registers an
     /// HTTP client with the specified base address and authorization header, as well as the required services for
-    /// feature flag management, including memory caching and scoped feature management services.</remarks>
+    /// feature flag management, including a background service that refreshes definitions and scoped feature management services.</remarks>
     /// <param name="builder">The <see cref="IHostApplicationBuilder"/> used to configure the application.</param>
     /// <returns>The <see cref="IHostApplicationBuilder"/> instance, allowing for method chaining.</returns>
     /// <exception cref="ArgumentException">Thrown if configuration value for <c>FeatureFlags:ApiBaseEndpoint</c> or <c>FeatureFlags:ApiKey</c> is null, empty, or whitespace.</exception>
@@ -40,7 +40,8 @@ public static class Extensions {
 
         // Register the feature management services
         builder.Services
-            .AddMemoryCache()
+            .AddSingleton<FeatureDefinitionRefreshService>()
+            .AddHostedService(sp => sp.GetRequiredService<FeatureDefinitionRefreshService>())
             .AddScoped<IFeatureFlagClient, HttpFeatureFlagClient>()
             .AddScoped<IFeatureDefinitionProvider, ClientFeatureDefinitionProvider>()
             .AddScopedFeatureManagement()

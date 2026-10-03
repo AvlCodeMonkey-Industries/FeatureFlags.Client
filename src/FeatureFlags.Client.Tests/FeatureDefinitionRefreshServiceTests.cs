@@ -1,0 +1,223 @@
+using System.Net;
+using System.Net.Http.Json;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Moq;
+
+namespace Acmi.FeatureFlags.Client.Tests;
+
+public class FeatureDefinitionRefreshServiceTests {
+    private readonly Mock<ILogger<FeatureDefinitionRefreshService>> _LoggerMock = new();
+
+    private sealed class StubHandler(Func<CancellationToken, Task<HttpResponseMessage>> respond) : HttpMessageHandler {
+        public int Calls;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+            Interlocked.Increment(ref Calls);
+            return respond(cancellationToken);
+        }
+    }
+
+    private sealed class ManualTimeProvider : TimeProvider {
+        private long _Timestamp;
+        public override long GetTimestamp() => Interlocked.Read(ref _Timestamp);
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public void Advance(TimeSpan by) => Interlocked.Add(ref _Timestamp, by.Ticks);
+    }
+
+    private static HttpResponseMessage Ok(params string[] names)
+        => new(HttpStatusCode.OK) { Content = JsonContent.Create(names.Select(n => new CustomFeatureDefinition { Name = n }).ToList()) };
+
+    private static HttpResponseMessage Status(HttpStatusCode code) => new(code);
+
+    private FeatureDefinitionRefreshService CreateService(StubHandler handler, TimeProvider? timeProvider = null, string minutes = "15") {
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient(Constants.HttpClientName)).Returns(() => new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://localhost/") });
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { { "FeatureFlags:CacheExpirationInMinutes", minutes } })
+            .Build();
+        return new FeatureDefinitionRefreshService(factory.Object, configuration, _LoggerMock.Object, timeProvider);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition) {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!condition()) {
+            Assert.True(DateTime.UtcNow < deadline, "Timed out waiting for condition");
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+    }
+
+    private void VerifyWarnings(Times times)
+        => _LoggerMock.Verify(l => l.Log(LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), times);
+
+    [Fact]
+    public async Task RefreshAsync_Success_ReplacesSnapshot() {
+        var responses = new Queue<HttpResponseMessage>([Ok("A"), Ok("B", "C")]);
+        var service = CreateService(new StubHandler(_ => Task.FromResult(responses.Dequeue())));
+
+        Assert.True(await service.RefreshAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(["A"], service.GetDefinitions().Select(d => d.Name));
+
+        Assert.True(await service.RefreshAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(["B", "C"], service.GetDefinitions().Select(d => d.Name));
+        Assert.Null(service.GetDefinition("A"));
+        Assert.NotNull(service.GetDefinition("c"));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task RefreshAsync_BadStatus_KeepsPreviousSnapshot(HttpStatusCode failure) {
+        var responses = new Queue<HttpResponseMessage>([Ok("A"), Status(failure)]);
+        var service = CreateService(new StubHandler(_ => Task.FromResult(responses.Dequeue())));
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(await service.RefreshAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(["A"], service.GetDefinitions().Select(d => d.Name));
+        VerifyWarnings(Times.Once());
+    }
+
+    [Fact]
+    public async Task RefreshAsync_NetworkError_KeepsPreviousSnapshot() {
+        var calls = 0;
+        var service = CreateService(new StubHandler(_ => ++calls == 1 ? Task.FromResult(Ok("A")) : throw new HttpRequestException("boom")));
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(await service.RefreshAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(["A"], service.GetDefinitions().Select(d => d.Name));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_RecoversAfterOutage() {
+        var responses = new Queue<HttpResponseMessage>([Ok("A"), Status(HttpStatusCode.ServiceUnavailable), Status(HttpStatusCode.ServiceUnavailable), Ok("A", "B")]);
+        var service = CreateService(new StubHandler(_ => Task.FromResult(responses.Dequeue())));
+
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+        Assert.Single(service.GetDefinitions());
+
+        Assert.True(await service.RefreshAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(["A", "B"], service.GetDefinitions().Select(d => d.Name));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_RepeatedFailures_LogsFirstThenThrottles() {
+        var time = new ManualTimeProvider();
+        var service = CreateService(new StubHandler(_ => Task.FromResult(Status(HttpStatusCode.BadGateway))), time);
+
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+        VerifyWarnings(Times.Once());
+
+        time.Advance(TimeSpan.FromHours(1));
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+        VerifyWarnings(Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task ColdStart_ApiDown_EvaluatesOffWithoutThrowing() {
+        var service = CreateService(new StubHandler(_ => throw new HttpRequestException("down")));
+        var client = new HttpFeatureFlagClient(service);
+
+        Assert.False(await service.RefreshAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(service.HasSnapshot);
+        Assert.Empty(await client.GetAllFeatureDefinitionsAsync(TestContext.Current.CancellationToken));
+        Assert.Null(await client.GetFeatureDefinitionByNameAsync("A", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Reads_DoNotBlockOnInFlightRefresh() {
+        var gate = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        var handler = new StubHandler(_ => ++calls == 1 ? Task.FromResult(Ok("A")) : gate.Task);
+        var service = CreateService(handler);
+        var client = new HttpFeatureFlagClient(service);
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+
+        var inFlight = service.RefreshAsync(TestContext.Current.CancellationToken);
+        await WaitUntilAsync(() => handler.Calls == 2);
+
+        var read = client.GetAllFeatureDefinitionsAsync(TestContext.Current.CancellationToken);
+        Assert.True(read.IsCompletedSuccessfully);
+        Assert.Equal(["A"], (await read).Select(d => d.Name));
+        Assert.False(inFlight.IsCompleted);
+
+        gate.SetResult(Ok("B"));
+        await inFlight;
+        Assert.Equal(["B"], service.GetDefinitions().Select(d => d.Name));
+    }
+
+    [Fact]
+    public async Task HostedService_RefreshesAtStartup_AndStopsCleanly() {
+        var handler = new StubHandler(_ => Task.FromResult(Ok("A")));
+        var service = CreateService(handler);
+
+        await service.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(service.HasSnapshot);
+        await service.StopAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task HostedService_RefreshesOnInterval() {
+        var handler = new StubHandler(_ => Task.FromResult(Ok("A")));
+        var service = CreateService(handler, minutes: "0.0002");
+
+        await service.StartAsync(TestContext.Current.CancellationToken);
+        await WaitUntilAsync(() => handler.Calls >= 3);
+        await service.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ClearCache_TriggersImmediateRefresh() {
+        var calls = 0;
+        var handler = new StubHandler(_ => Task.FromResult(++calls == 1 ? Ok("A") : Ok("B")));
+        var service = CreateService(handler);
+        var client = new HttpFeatureFlagClient(service);
+        await service.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(client.ClearCache());
+        await WaitUntilAsync(() => service.GetDefinition("B") is not null);
+
+        Assert.Equal(["B"], service.GetDefinitions().Select(d => d.Name));
+        await service.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ClearCache_DuringOutage_KeepsOldValues() {
+        var calls = 0;
+        var handler = new StubHandler(_ => Task.FromResult(++calls == 1 ? Ok("A") : Status(HttpStatusCode.InternalServerError)));
+        var service = CreateService(handler);
+        var client = new HttpFeatureFlagClient(service);
+        await service.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(client.ClearCache());
+        await WaitUntilAsync(() => handler.Calls >= 2);
+
+        var definitions = await client.GetAllFeatureDefinitionsAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(["A"], definitions.Select(d => d.Name));
+        await service.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task StartAsync_DoesNotHangWhenApiNeverResponds() {
+        var handler = new StubHandler(async ct => {
+            await Task.Delay(Timeout.Infinite, ct);
+            return Ok();
+        });
+        var service = CreateService(handler);
+
+        var started = service.StartAsync(TestContext.Current.CancellationToken);
+        await started.WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
+
+        Assert.False(service.HasSnapshot);
+        await service.StopAsync(TestContext.Current.CancellationToken);
+    }
+}
