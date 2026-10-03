@@ -21,9 +21,9 @@ Get started at https://featureflags.app, or if you want details first and vibes 
 ## What This Library Does
 
 - Registers feature management services in ASP.NET Core via a single `AddFeatureFlags()` call.
-- Fetches feature definitions from our API using an API key header (`x-api-key`).
+- Fetches feature definitions from our API using an API key header (`x-api-key`), in a background service, and keeps the last-known-good copy if a refresh fails.
 - Exposes `IFeatureManager`/`IFeatureManagerSnapshot` usage patterns you already know from `Microsoft.FeatureManagement`.
-- Includes a deterministic percentage filter (`Acmi.FeatureFlags.ConsistentPercentage`) and targeting support.
+- Includes a deterministic percentage filter (`FeatureFlags.ConsistentPercentage`) and targeting support.
 
 ## Package And Runtime
 
@@ -108,12 +108,15 @@ Also works with the normal ASP.NET Core feature management integrations:
 
 ## Cache Behavior
 
-`HttpFeatureFlagClient` caches all retrieved definitions in memory under a single cache entry.
+`AddFeatureFlags()` registers a hosted background service (`FeatureDefinitionRefreshService`) that keeps an in-memory snapshot of all feature definitions.
 
-- First request fetches from remote API.
-- Subsequent requests read from cache until expiration.
-- Expiration defaults to 15 minutes.
-- You can evict cache manually via `IFeatureFlagClient.ClearCache()`.
+- Definitions are fetched at startup. Startup waits up to 5 seconds for the first fetch, then continues without it.
+- They are refreshed every `CacheExpirationInMinutes` (default: `15`).
+- Flag checks read the current snapshot. Evaluation never waits on an HTTP call.
+- The snapshot is swapped atomically after each successful refresh.
+- If a refresh fails (timeout, network error, 5xx, 401/403), the last-known-good snapshot stays in place and the next refresh is retried on the next tick.
+- `IFeatureFlagClient.ClearCache()` requests an immediate background refresh. The old snapshot stays in place until that refresh succeeds. The method name is kept for compatibility.
+- Flag changes reach your app within your refresh interval (15 minutes by default). Use a shorter interval for apps that rely on kill-switch flags.
 
 Example:
 
@@ -128,7 +131,7 @@ public class AdminController : Controller {
 	[HttpPost]
 	public IActionResult RefreshFlags() {
 		_featureFlagClient.ClearCache();
-		return Ok(new { message = "Feature flag cache cleared." });
+		return Accepted(new { message = "Feature flag refresh requested." });
 	}
 }
 ```
@@ -155,13 +158,13 @@ Use this filter when you want stable rollout behavior for authenticated users in
 
 ## Failure Semantics
 
-When remote API calls fail:
+When a refresh fails:
 
-- Client logs an error.
-- `GetAllFeatureDefinitionsAsync()` returns an empty list.
-- `GetFeatureDefinitionByNameAsync()` returns `null`.
+- The client logs a warning with the reason. During a long outage it logs the first failure and then at most once an hour.
+- The last-known-good definitions keep being served, and the refresh is retried on the next tick.
+- A log message is written when refreshes recover.
 
-In practice this means feature checks degrade to "off" unless your app defines alternate behavior. This is generally safer than throwing exceptions into request pipelines and setting your pager on fire.
+**Cold start with the API down:** if the app starts while FeatureFlags.app is unreachable (or the API key is invalid), no snapshot exists yet. `GetAllFeatureDefinitionsAsync()` returns an empty list, `GetFeatureDefinitionByNameAsync()` returns `null`, and all flags evaluate off until the first successful fetch. Nothing is thrown into the request pipeline.
 
 ## Common Issues And Fixes
 
@@ -182,13 +185,13 @@ Fix:
 Possible causes:
 
 - API key invalid or missing permissions.
-- API unavailable (client degrades to empty definitions).
+- The API was unreachable the whole time since the app started, so no definitions have been loaded (see "Cold start" above).
 - Flag name mismatch (`"NewDashboard"` vs `"NewDashbaord"`, yes this typo happens a lot).
 
 Fix:
 
 - Verify API key and endpoint.
-- Check app logs for "Error fetching feature definitions".
+- Check app logs for "Failed to refresh feature definitions".
 - Centralize flag names in constants to avoid string-literal drift.
 
 ### 3. Rollout percentages look random per request
@@ -202,16 +205,16 @@ Fix:
 - Ensure authenticated identity with stable `User.Identity.Name`.
 - If anonymous traffic dominates, choose filter strategy accordingly.
 
-### 4. Flag updates not visible immediately
+### 4. Flag updates are not visible right away
 
 Cause:
 
-- Cached definitions not yet expired.
+- Definitions refresh in the background every `CacheExpirationInMinutes` (15 by default), so a change shows up within that interval.
 
 Fix:
 
-- Lower `CacheExpirationInMinutes` for development.
-- Call `IFeatureFlagClient.ClearCache()` after admin updates when immediate refresh is required.
+- Lower `CacheExpirationInMinutes` for development, or for apps that rely on kill-switch flags.
+- Call `IFeatureFlagClient.ClearCache()` to request an immediate background refresh. It returns right away, and the new values appear once the refresh completes.
 
 ## Local Validation
 
