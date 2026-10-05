@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,10 +17,10 @@ public static class Extensions {
     /// configuration (using the keys <c>FeatureFlags:ApiBaseEndpoint</c> and <c>FeatureFlags:ApiKey</c>, respectively).
     /// If either value is missing or invalid, an <see cref="ArgumentException"/> is thrown.  The method registers an
     /// HTTP client with the specified base address and authorization header, as well as the required services for
-    /// feature flag management, including memory caching and scoped feature management services.</remarks>
+    /// feature flag management, including a background service that refreshes definitions and scoped feature management services.</remarks>
     /// <param name="builder">The <see cref="IHostApplicationBuilder"/> used to configure the application.</param>
     /// <returns>The <see cref="IHostApplicationBuilder"/> instance, allowing for method chaining.</returns>
-    /// <exception cref="ArgumentException">Thrown if configuration value for <c>FeatureFlags:ApiBaseEndpoint</c> or <c>FeatureFlags:ApiKey</c> is null, empty, or whitespace.</exception>
+    /// <exception cref="ArgumentException">Thrown if required configuration is missing or the cache expiration interval is invalid.</exception>
     public static IHostApplicationBuilder AddFeatureFlags(this IHostApplicationBuilder builder) {
         var apiBaseEndpoint = builder.Configuration.GetValue<string>("FeatureFlags:ApiBaseEndpoint");
         if (string.IsNullOrWhiteSpace(apiBaseEndpoint)) {
@@ -29,6 +30,7 @@ public static class Extensions {
         if (string.IsNullOrWhiteSpace(apiKey)) {
             throw new ArgumentException("FeatureFlags:ApiKey is not configured.");
         }
+        ValidateRefreshInterval(builder.Configuration);
 
         // Register the feature flag client
         builder.Services.AddHttpClient(Constants.HttpClientName, client => {
@@ -40,7 +42,8 @@ public static class Extensions {
 
         // Register the feature management services
         builder.Services
-            .AddMemoryCache()
+            .AddSingleton<FeatureDefinitionRefreshService>()
+            .AddHostedService(sp => sp.GetRequiredService<FeatureDefinitionRefreshService>())
             .AddScoped<IFeatureFlagClient, HttpFeatureFlagClient>()
             .AddScoped<IFeatureDefinitionProvider, ClientFeatureDefinitionProvider>()
             .AddScopedFeatureManagement()
@@ -48,5 +51,22 @@ public static class Extensions {
             .WithTargeting();
 
         return builder;
+    }
+
+    private static void ValidateRefreshInterval(IConfiguration configuration) {
+        const string key = "FeatureFlags:CacheExpirationInMinutes";
+        var value = configuration[key];
+        if (value is null) {
+            return;
+        }
+
+        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var minutes)
+            || !double.IsFinite(minutes)
+            || minutes <= 0
+            || minutes > int.MaxValue / (double)TimeSpan.MillisecondsPerMinute
+            || TimeSpan.FromMinutes(minutes).TotalMilliseconds > int.MaxValue) {
+            throw new ArgumentException(
+                $"Configuration value '{key}' must be a positive number that fits within the supported refresh timeout.");
+        }
     }
 }

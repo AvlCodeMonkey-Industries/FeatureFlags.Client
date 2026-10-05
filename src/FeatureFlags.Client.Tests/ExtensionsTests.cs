@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -40,6 +39,30 @@ public class ExtensionsTests {
         Assert.Contains("ApiKey", ex.Message);
     }
 
+    [Theory]
+    [InlineData("not-a-number")]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("1e300")]
+    [InlineData("35791.3942")]
+    public void AddFeatureFlags_ThrowsIfCacheExpirationIntervalIsInvalid(string minutes) {
+        // Arrange
+        var configurationManager = new ConfigurationManager();
+        configurationManager.AddInMemoryCollection(new Dictionary<string, string?> {
+            { "FeatureFlags:ApiBaseEndpoint", "https://api.example.com" },
+            { "FeatureFlags:ApiKey", "valid-key" },
+            { "FeatureFlags:CacheExpirationInMinutes", minutes }
+        });
+        var builderMock = new Mock<IHostApplicationBuilder>();
+        builderMock.SetupGet(b => b.Configuration).Returns(configurationManager);
+
+        // Act & Assert
+        var ex = Assert.Throws<ArgumentException>(() => Extensions.AddFeatureFlags(builderMock.Object));
+        Assert.Contains("CacheExpirationInMinutes", ex.Message);
+    }
+
     [Fact]
     public void AddFeatureFlags_RegistersServicesAndReturnsBuilder() {
         // Arrange
@@ -60,7 +83,8 @@ public class ExtensionsTests {
         Assert.Same(builderMock.Object, result);
         Assert.Contains(services, s => s.ServiceType == typeof(IFeatureFlagClient));
         Assert.Contains(services, s => s.ServiceType == typeof(IFeatureDefinitionProvider));
-        Assert.Contains(services, s => s.ServiceType == typeof(IMemoryCache));
+        Assert.Contains(services, s => s.ServiceType == typeof(FeatureDefinitionRefreshService));
+        Assert.Contains(services, s => s.ServiceType == typeof(IHostedService) && s.ImplementationFactory is not null);
         Assert.Contains(services, s => s.ServiceType == typeof(IHttpClientFactory));
 
         // Build the service provider and get the factory
