@@ -15,7 +15,9 @@ namespace Acmi.FeatureFlags.Client;
 /// Readers use the current snapshot and never wait on HTTP. A failed refresh keeps the last-known-good snapshot.
 /// If no refresh has ever succeeded (for example the API is down at startup), there is no snapshot and flags evaluate off.
 /// </remarks>
-public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<FeatureDefinitionRefreshService> logger, TimeProvider? timeProvider = null) : BackgroundService {
+public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<FeatureDefinitionRefreshService> logger,
+    TimeProvider? timeProvider = null) : BackgroundService {
+
     private const double _DefaultRefreshMinutes = 15;
     private static readonly TimeSpan _StartupWait = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan _RequestTimeout = TimeSpan.FromSeconds(30);
