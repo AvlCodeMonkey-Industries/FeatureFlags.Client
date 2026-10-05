@@ -39,8 +39,8 @@ public class FeatureDefinitionRefreshServiceTests {
         return new FeatureDefinitionRefreshService(factory.Object, configuration, _LoggerMock.Object, timeProvider);
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition) {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null) {
+        var deadline = DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(10));
         while (!condition()) {
             Assert.True(DateTime.UtcNow < deadline, "Timed out waiting for condition");
             await Task.Delay(10, TestContext.Current.CancellationToken);
@@ -171,7 +171,7 @@ public class FeatureDefinitionRefreshServiceTests {
         var service = CreateService(handler, minutes: "0.0002");
 
         await service.StartAsync(TestContext.Current.CancellationToken);
-        await WaitUntilAsync(() => handler.Calls >= 3);
+        await WaitUntilAsync(() => handler.Calls >= 3, TimeSpan.FromSeconds(20));
         await service.StopAsync(TestContext.Current.CancellationToken);
     }
 
@@ -204,6 +204,77 @@ public class FeatureDefinitionRefreshServiceTests {
         var definitions = await client.GetAllFeatureDefinitionsAsync(TestContext.Current.CancellationToken);
         Assert.Equal(["A"], definitions.Select(d => d.Name));
         await service.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task RequestRefresh_RepeatedCalls_AreCoalescedAndRateLimited() {
+        var handler = new StubHandler(_ => Task.FromResult(Ok("A")));
+        var service = CreateService(handler);
+        await service.StartAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(1, handler.Calls);
+
+        for (var i = 0; i < 1000; i++) {
+            service.RequestRefresh();
+        }
+
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+        Assert.Equal(1, handler.Calls); // still inside the minimum gap
+        await WaitUntilAsync(() => handler.Calls == 2);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.Equal(2, handler.Calls); // the 1000 requests produced a single fetch
+        await service.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task RequestRefresh_AfterDispose_DoesNotThrow() {
+        var service = CreateService(new StubHandler(_ => Task.FromResult(Ok("A"))));
+        service.Dispose();
+
+        var exception = Record.Exception(service.RequestRefresh);
+
+        Assert.Null(exception);
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ConcurrentCalls_RunOneAtATime() {
+        var running = 0;
+        var maxRunning = 0;
+        var handler = new StubHandler(async ct => {
+            var now = Interlocked.Increment(ref running);
+            InterlockedMax(ref maxRunning, now);
+            await Task.Delay(50, ct);
+            Interlocked.Decrement(ref running);
+            return Ok("A");
+        });
+        var service = CreateService(handler);
+
+        await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => service.RefreshAsync(TestContext.Current.CancellationToken)));
+
+        Assert.Equal(5, handler.Calls);
+        Assert.Equal(1, maxRunning);
+    }
+
+    [Fact]
+    public async Task HostedService_ApiDownAtStartup_RetriesWithBackoffInsteadOfWaitingFullInterval() {
+        var calls = 0;
+        var handler = new StubHandler(_ => Task.FromResult(++calls == 1 ? Status(HttpStatusCode.ServiceUnavailable) : Ok("A")));
+        var service = CreateService(handler); // 15 minute interval
+
+        await service.StartAsync(TestContext.Current.CancellationToken);
+        Assert.False(service.HasSnapshot);
+
+        await WaitUntilAsync(() => service.HasSnapshot);
+        await service.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    private static void InterlockedMax(ref int target, int value) {
+        int current;
+        while (value > (current = Volatile.Read(ref target))) {
+            if (Interlocked.CompareExchange(ref target, value, current) == current) {
+                return;
+            }
+        }
     }
 
     [Fact]

@@ -19,13 +19,16 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
     private const double _DefaultRefreshMinutes = 15;
     private static readonly TimeSpan _StartupWait = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan _RequestTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan _MinimumRefreshGap = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan _RepeatWarningInterval = TimeSpan.FromHours(1);
+    private const int _MaxBackoffExponent = 10;
 
     private readonly IHttpClientFactory _HttpClientFactory = httpClientFactory;
     private readonly IConfiguration _Configuration = configuration;
     private readonly ILogger<FeatureDefinitionRefreshService> _Logger = logger;
     private readonly TimeProvider _TimeProvider = timeProvider ?? TimeProvider.System;
     private readonly SemaphoreSlim _RefreshSignal = new(0, 1);
+    private readonly SemaphoreSlim _RefreshLock = new(1, 1);
     private readonly TaskCompletionSource _InitialRefreshCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private Snapshot? _Snapshot;
@@ -51,11 +54,19 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
     /// <summary>
     /// Asks the background loop to refresh immediately. The current snapshot stays in place until the refresh succeeds.
     /// </summary>
+    /// <remarks>
+    /// Requests are coalesced, and refreshes are at least five seconds apart, so calling this repeatedly is cheap and can't hammer the API.
+    /// </remarks>
     public void RequestRefresh() {
         try {
+            if (_RefreshSignal.CurrentCount > 0) {
+                return; // already requested
+            }
             _RefreshSignal.Release();
         } catch (SemaphoreFullException) {
-            // a refresh is already requested
+            // lost a race with another caller; a refresh is already requested
+        } catch (ObjectDisposedException) {
+            // host is shutting down; nothing left to refresh
         }
     }
 
@@ -76,11 +87,23 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         try {
             await RefreshAsync(stoppingToken);
+            var lastRefresh = _TimeProvider.GetTimestamp();
             _InitialRefreshCompleted.TrySetResult();
 
             while (!stoppingToken.IsCancellationRequested) {
-                await _RefreshSignal.WaitAsync(RefreshInterval, stoppingToken);
+                await _RefreshSignal.WaitAsync(NextDelay(), stoppingToken);
+
+                // enforce a minimum gap between fetches so repeated requests can't hammer the API
+                var remaining = _MinimumRefreshGap - _TimeProvider.GetElapsedTime(lastRefresh);
+                if (remaining > TimeSpan.Zero) {
+                    await Task.Delay(remaining, _TimeProvider, stoppingToken);
+
+                    // requests made while waiting are satisfied by the fetch we're about to do
+                    await _RefreshSignal.WaitAsync(0, CancellationToken.None);
+                }
+
                 await RefreshAsync(stoppingToken);
+                lastRefresh = _TimeProvider.GetTimestamp();
             }
         } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
             // shutting down
@@ -93,7 +116,11 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
     /// Fetches definitions and swaps the snapshot on success. On failure the previous snapshot is kept.
     /// </summary>
     /// <returns>True if the refresh succeeded, else false.</returns>
+    /// <remarks>
+    /// Only one refresh runs at a time; concurrent callers queue, so an older response can never overwrite a newer snapshot.
+    /// </remarks>
     public async Task<bool> RefreshAsync(CancellationToken cancellationToken = default) {
+        await _RefreshLock.WaitAsync(cancellationToken);
         try {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(_RequestTimeout);
@@ -114,6 +141,8 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
         } catch (Exception ex) {
             LogRefreshFailure(ex);
             return false;
+        } finally {
+            _RefreshLock.Release();
         }
     }
 
@@ -122,6 +151,17 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
             var minutes = _Configuration.GetValue("FeatureFlags:CacheExpirationInMinutes", _DefaultRefreshMinutes);
             return TimeSpan.FromMinutes(minutes > 0 ? minutes : _DefaultRefreshMinutes);
         }
+    }
+
+    // normal interval when healthy; while failing, retry with exponential backoff capped at the normal interval
+    private TimeSpan NextDelay() {
+        var interval = RefreshInterval;
+        var failures = Volatile.Read(ref _ConsecutiveFailures);
+        if (failures == 0) {
+            return interval;
+        }
+        var backoff = TimeSpan.FromSeconds(Math.Pow(2, Math.Min(failures, _MaxBackoffExponent)));
+        return backoff < interval ? backoff : interval;
     }
 
     // log the first failure, then at most once per hour while the outage continues
@@ -144,6 +184,7 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
     /// <inheritdoc />
     public override void Dispose() {
         _RefreshSignal.Dispose();
+        _RefreshLock.Dispose();
         base.Dispose();
     }
 
