@@ -39,6 +39,30 @@ public class ExtensionsTests {
         Assert.Contains("ApiKey", ex.Message);
     }
 
+    [Theory]
+    [InlineData("not-a-number")]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("1e300")]
+    [InlineData("35791.3942")]
+    public void AddFeatureFlags_ThrowsIfCacheExpirationIntervalIsInvalid(string minutes) {
+        // Arrange
+        var configurationManager = new ConfigurationManager();
+        configurationManager.AddInMemoryCollection(new Dictionary<string, string?> {
+            { "FeatureFlags:ApiBaseEndpoint", "https://api.example.com" },
+            { "FeatureFlags:ApiKey", "valid-key" },
+            { "FeatureFlags:CacheExpirationInMinutes", minutes }
+        });
+        var builderMock = new Mock<IHostApplicationBuilder>();
+        builderMock.SetupGet(b => b.Configuration).Returns(configurationManager);
+
+        // Act & Assert
+        var ex = Assert.Throws<ArgumentException>(() => Extensions.AddFeatureFlags(builderMock.Object));
+        Assert.Contains("CacheExpirationInMinutes", ex.Message);
+    }
+
     [Fact]
     public void AddFeatureFlags_RegistersServicesAndReturnsBuilder() {
         // Arrange
