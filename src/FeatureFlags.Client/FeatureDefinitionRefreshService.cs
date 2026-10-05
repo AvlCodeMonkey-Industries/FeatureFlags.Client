@@ -122,8 +122,8 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
     public async Task<bool> RefreshAsync(CancellationToken cancellationToken = default) {
         await _RefreshLock.WaitAsync(cancellationToken);
         try {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(_RequestTimeout);
+            using var timeoutSource = new CancellationTokenSource(_RequestTimeout, _TimeProvider);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
 
             var httpClient = _HttpClientFactory.CreateClient(Constants.HttpClientName);
             using var response = await httpClient.GetAsync("features", timeout.Token);

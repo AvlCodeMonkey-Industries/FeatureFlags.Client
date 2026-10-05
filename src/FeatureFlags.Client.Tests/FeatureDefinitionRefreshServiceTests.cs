@@ -25,6 +25,55 @@ public class FeatureDefinitionRefreshServiceTests {
         public void Advance(TimeSpan by) => Interlocked.Add(ref _Timestamp, by.Ticks);
     }
 
+    private sealed class TimeoutTimeProvider : TimeProvider {
+        private readonly List<FakeTimer> _Timers = [];
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) {
+            if (dueTime != TimeSpan.FromSeconds(30)) {
+                return base.CreateTimer(callback, state, dueTime, period);
+            }
+            var timer = new FakeTimer(() => callback(state));
+            lock (_Timers) {
+                _Timers.Add(timer);
+            }
+            return timer;
+        }
+
+        public int TimerCount {
+            get {
+                lock (_Timers) {
+                    return _Timers.Count;
+                }
+            }
+        }
+
+        public void FireTimeouts() {
+            FakeTimer[] timers;
+            lock (_Timers) {
+                timers = [.. _Timers];
+                _Timers.Clear();
+            }
+            foreach (var timer in timers) {
+                timer.Fire();
+            }
+        }
+
+        private sealed class FakeTimer(Action fire) : ITimer {
+            private int _Disposed;
+            public void Fire() {
+                if (Volatile.Read(ref _Disposed) == 0) {
+                    fire();
+                }
+            }
+            public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+            public void Dispose() => Interlocked.Exchange(ref _Disposed, 1);
+            public ValueTask DisposeAsync() {
+                Dispose();
+                return ValueTask.CompletedTask;
+            }
+        }
+    }
+
     private static HttpResponseMessage Ok(params string[] names)
         => new(HttpStatusCode.OK) { Content = JsonContent.Create(names.Select(n => new CustomFeatureDefinition { Name = n }).ToList()) };
 
@@ -290,5 +339,35 @@ public class FeatureDefinitionRefreshServiceTests {
 
         Assert.False(service.HasSnapshot);
         await service.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_RequestTimeout_ReturnsFalseKeepsSnapshotAndAllowsRetry() {
+        var time = new TimeoutTimeProvider();
+        var call = 0;
+        var handler = new StubHandler(async ct => {
+            switch (Interlocked.Increment(ref call)) {
+                case 1:
+                    return Ok("A");
+                case 2:
+                    await Task.Delay(Timeout.Infinite, ct);
+                    return Ok();
+                default:
+                    return Ok("B");
+            }
+        });
+        var service = CreateService(handler, time);
+        Assert.True(await service.RefreshAsync(TestContext.Current.CancellationToken));
+
+        var timedOut = service.RefreshAsync(TestContext.Current.CancellationToken);
+        await WaitUntilAsync(() => time.TimerCount > 0 && Volatile.Read(ref handler.Calls) == 2);
+        time.FireTimeouts();
+
+        Assert.False(await timedOut.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        Assert.Equal(["A"], service.GetDefinitions().Select(d => d.Name));
+        VerifyWarnings(Times.Once());
+
+        Assert.True(await service.RefreshAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(["B"], service.GetDefinitions().Select(d => d.Name));
     }
 }
