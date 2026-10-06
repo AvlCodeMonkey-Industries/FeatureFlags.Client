@@ -21,9 +21,9 @@ Get started at https://featureflags.app, or if you want details first and vibes 
 ## What This Library Does
 
 - Registers feature management services in ASP.NET Core via a single `AddFeatureFlags()` call.
-- Fetches feature definitions from our API using an API key header (`x-api-key`), in a background service, and keeps the last-known-good copy if a refresh fails.
+- Fetches feature definitions from our API using an API key header (`x-api-key`), in a background service, and keeps the last-known-good copy if a refresh fails. The API serves the standard Microsoft Feature Management schema (`feature_management.feature_flags[]`), parsed by Microsoft's own provider.
 - Exposes `IFeatureManager`/`IFeatureManagerSnapshot` usage patterns you already know from `Microsoft.FeatureManagement`.
-- Includes a deterministic percentage filter (`FeatureFlags.ConsistentPercentage`) and targeting support.
+- Supports Microsoft's built-in filters, including targeting. Percentage rollouts use the Targeting filter, so users are placed in or out of a rollout consistently.
 
 ## Package And Runtime
 
@@ -141,20 +141,17 @@ public class AdminController : Controller {
 Service registration wires up:
 
 - `AddScopedFeatureManagement()`
-- `.AddFeatureFilter<ConsistentPercentageFilter>()`
 - `.WithTargeting()`
 
-### Consistent percentage filter
+Flags use Microsoft's built-in `Microsoft.Targeting` and `Microsoft.TimeWindow` filters. Custom filters defined in the dashboard receive their `parameters` under their own names (for example `Level`), exactly as in a plain `appsettings.json`.
 
-Alias: `FeatureFlags.ConsistentPercentage`
+### Percentage rollouts
 
-Behavior:
+A percentage flag is served as Microsoft's Targeting filter with a `DefaultRolloutPercentage`. Microsoft's filter hashes the user id together with the feature name, so:
 
-- If user identity name exists, result is deterministic per user.
-- If user identity name is missing, it falls back to random evaluation.
-- If configured percentage value is invalid (`< 0`), evaluation returns `false`.
-
-Use this filter when you want stable rollout behavior for authenticated users instead of request-by-request randomness.
+- Each user stays in or out of the rollout on every request, and the rollout size matches the configured percentage.
+- Different flags bucket the same user differently, so one rollout doesn't always pick the same users.
+- The user id comes from `User.Identity.Name` by default (`.WithTargeting()`). Without an identity, every anonymous request lands in the same bucket, so a percentage flag is either on or off for all anonymous traffic. To roll out to anonymous visitors, register your own `ITargetingContextAccessor` that supplies a stable id such as a cookie or session id.
 
 ## Failure Semantics
 
@@ -194,16 +191,16 @@ Fix:
 - Check app logs for "Failed to refresh feature definitions".
 - Centralize flag names in constants to avoid string-literal drift.
 
-### 3. Rollout percentages look random per request
+### 3. A percentage rollout is all on or all off for anonymous users
 
 Cause:
 
-- User identity name is missing, so consistent percentage filter uses random fallback.
+- There is no user identity, so every anonymous request is placed in the same Targeting bucket.
 
 Fix:
 
-- Ensure authenticated identity with stable `User.Identity.Name`.
-- If anonymous traffic dominates, choose filter strategy accordingly.
+- Ensure authenticated users have a stable `User.Identity.Name`.
+- For anonymous traffic, register an `ITargetingContextAccessor` that supplies a stable id (cookie or session id).
 
 ### 4. Flag updates are not visible right away
 

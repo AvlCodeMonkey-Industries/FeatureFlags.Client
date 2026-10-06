@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using System.Net.Http.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -128,11 +127,11 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
 
             var httpClient = _HttpClientFactory.CreateClient(Constants.HttpClientName);
-            using var response = await httpClient.GetAsync("features", timeout.Token);
+            using var response = await httpClient.GetAsync(Constants.FeaturesPath, timeout.Token);
             response.EnsureSuccessStatusCode();
 
-            var featureFlags = await response.Content.ReadFromJsonAsync<List<CustomFeatureDefinition>>(timeout.Token) ?? [];
-            Volatile.Write(ref _Snapshot, new Snapshot(featureFlags.Select(FeatureDefinitionMapper.ToFeatureDefinition).ToArray()));
+            var definitions = await ParseDefinitionsAsync(response.Content, timeout.Token);
+            Volatile.Write(ref _Snapshot, new Snapshot(definitions));
 
             if (Interlocked.Exchange(ref _ConsecutiveFailures, 0) > 0) {
                 _Logger.LogInformation("Feature definition refresh recovered");
@@ -146,6 +145,19 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
         } finally {
             _RefreshLock.Release();
         }
+    }
+
+    // the API serves the Microsoft Feature Management schema (feature_management.feature_flags[]), so let Microsoft's own provider parse it
+    private static async Task<FeatureDefinition[]> ParseDefinitionsAsync(HttpContent content, CancellationToken cancellationToken) {
+        await using var stream = await content.ReadAsStreamAsync(cancellationToken);
+        var configuration = new ConfigurationBuilder().AddJsonStream(stream).Build();
+
+        using var provider = new ConfigurationFeatureDefinitionProvider(configuration);
+        var definitions = new List<FeatureDefinition>();
+        await foreach (var definition in provider.GetAllFeatureDefinitionsAsync().WithCancellation(cancellationToken)) {
+            definitions.Add(definition);
+        }
+        return [.. definitions];
     }
 
     private TimeSpan RefreshInterval {
