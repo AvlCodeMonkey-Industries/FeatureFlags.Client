@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -74,8 +73,12 @@ public class FeatureDefinitionRefreshServiceTests {
         }
     }
 
+    // the API serves the Microsoft Feature Management schema
+    private static HttpResponseMessage OkJson(string json)
+        => new(HttpStatusCode.OK) { Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json") };
+
     private static HttpResponseMessage Ok(params string[] names)
-        => new(HttpStatusCode.OK) { Content = JsonContent.Create(names.Select(n => new CustomFeatureDefinition { Name = n }).ToList()) };
+        => OkJson($$"""{ "feature_management": { "feature_flags": [ {{string.Join(",", names.Select(n => $$"""{ "id": "{{n}}", "enabled": true }"""))}} ] } }""");
 
     private static HttpResponseMessage Status(HttpStatusCode code) => new(code);
 
