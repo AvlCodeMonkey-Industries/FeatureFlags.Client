@@ -23,7 +23,7 @@ public interface IFeatureFlagClient {
     Task<FeatureDefinition?> GetFeatureDefinitionByNameAsync(string name, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Requests an immediate refresh of feature definitions from the remote service.
+    /// Requests a refresh of feature definitions from the remote service right now, without waiting for the next interval.
     /// The refresh runs in the background. The existing snapshot stays in place until it succeeds,
     /// so if the service is unreachable the previous definitions keep being used.
     /// </summary>

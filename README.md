@@ -115,7 +115,7 @@ Also works with the normal ASP.NET Core feature management integrations:
 - Flag checks read the current snapshot. Evaluation never waits on an HTTP call.
 - The snapshot is swapped atomically after each successful refresh.
 - If a refresh fails (timeout, network error, 5xx, 401/403), the last-known-good snapshot stays in place and the refresh is retried with exponential backoff (see "Failure Semantics").
-- `IFeatureFlagClient.ClearCache()` requests an immediate background refresh. The old snapshot stays in place until that refresh succeeds. The method name is kept for compatibility.
+- `IFeatureFlagClient.ClearCache()` asks the background service to refresh now. The old snapshot stays in place until that refresh succeeds. The method name is kept for compatibility.
 - Flag changes typically reach your app within the configured interval plus the time taken by the next refresh (up to 30 seconds), assuming the API responds successfully. Use a shorter interval for apps that rely on kill-switch flags.
 
 Example:
@@ -202,7 +202,7 @@ Fix:
 - Ensure authenticated users have a stable `User.Identity.Name`.
 - For anonymous traffic, register an `ITargetingContextAccessor` that supplies a stable id (cookie or session id).
 
-### 4. Flag updates are not visible right away
+### 4. Flag updates take up to the refresh interval to appear
 
 Cause:
 
@@ -211,7 +211,7 @@ Cause:
 Fix:
 
 - Lower `CacheExpirationInMinutes` for development, or for apps that rely on kill-switch flags.
-- Call `IFeatureFlagClient.ClearCache()` to request an immediate background refresh. It returns right away, and the new values appear once the refresh completes.
+- Call `IFeatureFlagClient.ClearCache()` to ask for a refresh now. It returns without waiting, and the new values appear once the refresh completes.
 
 ## Local Validation
 
