@@ -53,7 +53,7 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
         => Volatile.Read(ref _Snapshot)?.ByName.GetValueOrDefault(name);
 
     /// <summary>
-    /// Asks the background loop to refresh immediately. The current snapshot stays in place until the refresh succeeds.
+    /// Asks the background loop to refresh now. The current snapshot stays in place until the refresh succeeds.
     /// </summary>
     /// <remarks>
     /// Requests are coalesced, and refreshes are at least five seconds apart, so calling this repeatedly is cheap and can't hammer the API.
