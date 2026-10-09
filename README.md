@@ -1,6 +1,6 @@
 # FeatureFlags.app
 
-Deploy anytime. Release when you're ready. FeatureFlags.app gives .NET developers cloud-agnostic feature management with no user tracking, no vendor lock-in, and seamless Microsoft integration. Built for Modern .NET Applications, it's the perfect solution for development teams seeking a simple, no-frills feature flag management system. FeatureFlags.Client is the client library that integrates your application with FeatureFlags.app.
+Deploy anytime. Release when you're ready. FeatureFlags.app is a hosted dashboard for Microsoft.FeatureManagement: keep your `IFeatureManager`, `[FeatureGate]`, and `<feature>` tag helpers, change flags without redeploying, and skip the Azure subscription. FeatureFlags.Client is the MIT-licensed client library that integrates your ASP.NET Core application with FeatureFlags.app.
 
 Get started at https://featureflags.app, or if you want details first and vibes later, keep reading.
 
@@ -29,7 +29,7 @@ Get started at https://featureflags.app, or if you want details first and vibes 
 
 - Package: [`Acmi.FeatureFlags.Client`](https://www.nuget.org/packages/Acmi.FeatureFlags.Client/)
 - Namespace: `Acmi.FeatureFlags.Client`
-- Target framework: `net10.0`
+- Target framework: `net10.0`. Requires ASP.NET Core on .NET 10 or later.
 - Core dependency: `Microsoft.FeatureManagement.AspNetCore`
 
 ## Quick Start
