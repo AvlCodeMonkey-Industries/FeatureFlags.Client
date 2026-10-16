@@ -11,8 +11,14 @@ public class FeatureDefinitionRefreshServiceTests {
     private sealed class StubHandler(Func<CancellationToken, Task<HttpResponseMessage>> respond) : HttpMessageHandler {
         public int Calls;
 
+        // the If-None-Match header of each request, empty when it wasn't sent
+        public List<string> IfNoneMatch { get; } = [];
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
             Interlocked.Increment(ref Calls);
+            lock (IfNoneMatch) {
+                IfNoneMatch.Add(request.Headers.IfNoneMatch.ToString());
+            }
             return respond(cancellationToken);
         }
     }
@@ -82,6 +88,11 @@ public class FeatureDefinitionRefreshServiceTests {
 
     private static HttpResponseMessage Status(HttpStatusCode code) => new(code);
 
+    private static HttpResponseMessage WithETag(HttpResponseMessage response, string eTag) {
+        response.Headers.ETag = new System.Net.Http.Headers.EntityTagHeaderValue(eTag);
+        return response;
+    }
+
     private FeatureDefinitionRefreshService CreateService(StubHandler handler, TimeProvider? timeProvider = null, string minutes = "15") {
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient(Constants.HttpClientName)).Returns(() => new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://localhost/") });
@@ -114,6 +125,69 @@ public class FeatureDefinitionRefreshServiceTests {
         Assert.Equal(["B", "C"], service.GetDefinitions().Select(d => d.Name));
         Assert.Null(service.GetDefinition("A"));
         Assert.NotNull(service.GetDefinition("c"));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_SendsTheETagOfTheSnapshotAndKeepsItOnNotModified() {
+        var responses = new Queue<HttpResponseMessage>([WithETag(Ok("A"), "\"v1\""), Status(HttpStatusCode.NotModified)]);
+        var handler = new StubHandler(_ => Task.FromResult(responses.Dequeue()));
+        var service = CreateService(handler);
+
+        Assert.True(await service.RefreshAsync(TestContext.Current.CancellationToken));
+        var snapshotDefinition = service.GetDefinition("A");
+        Assert.True(await service.RefreshAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(["", "\"v1\""], handler.IfNoneMatch);
+        Assert.Same(snapshotDefinition, service.GetDefinition("A"));
+        VerifyWarnings(Times.Never());
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ChangedFlags_ReplaceTheSnapshotAndTheETag() {
+        var responses = new Queue<HttpResponseMessage>([WithETag(Ok("A"), "\"v1\""), WithETag(Ok("B"), "\"v2\""), Status(HttpStatusCode.NotModified)]);
+        var handler = new StubHandler(_ => Task.FromResult(responses.Dequeue()));
+        var service = CreateService(handler);
+
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(["", "\"v1\"", "\"v2\""], handler.IfNoneMatch);
+        Assert.Equal(["B"], service.GetDefinitions().Select(d => d.Name));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ServerWithoutETags_IsFetchedInFullEachTime() {
+        var responses = new Queue<HttpResponseMessage>([Ok("A"), Ok("B")]);
+        var handler = new StubHandler(_ => Task.FromResult(responses.Dequeue()));
+        var service = CreateService(handler);
+
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(["", ""], handler.IfNoneMatch);
+        Assert.Equal(["B"], service.GetDefinitions().Select(d => d.Name));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_NotModifiedWithoutASnapshot_IsAFailure() {
+        var service = CreateService(new StubHandler(_ => Task.FromResult(Status(HttpStatusCode.NotModified))));
+
+        Assert.False(await service.RefreshAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(service.HasSnapshot);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_NotModified_ResetsTheFailureCountSoRecoveryIsLogged() {
+        var responses = new Queue<HttpResponseMessage>([WithETag(Ok("A"), "\"v1\""), Status(HttpStatusCode.InternalServerError), Status(HttpStatusCode.NotModified)]);
+        var service = CreateService(new StubHandler(_ => Task.FromResult(responses.Dequeue())));
+
+        await service.RefreshAsync(TestContext.Current.CancellationToken);
+        Assert.False(await service.RefreshAsync(TestContext.Current.CancellationToken));
+        Assert.True(await service.RefreshAsync(TestContext.Current.CancellationToken));
+
+        _LoggerMock.Verify(l => l.Log(LogLevel.Information, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
     }
 
     [Theory]
