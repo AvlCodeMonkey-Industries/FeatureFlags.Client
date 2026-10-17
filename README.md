@@ -114,6 +114,7 @@ Also works with the normal ASP.NET Core feature management integrations:
 - After each refresh completes, the next periodic refresh starts after `CacheExpirationInMinutes` (default: `15`); requests time out after 30 seconds.
 - Flag checks read the current snapshot. Evaluation never waits on an HTTP call.
 - The snapshot is swapped atomically after each successful refresh.
+- Each refresh sends the snapshot's `ETag` in `If-None-Match`. While your flags haven't changed, the API answers with an empty `304 Not Modified` and the snapshot stays as it is.
 - If a refresh fails (timeout, network error, 5xx, 401/403), the last-known-good snapshot stays in place and the refresh is retried with exponential backoff (see "Failure Semantics").
 - `IFeatureFlagClient.ClearCache()` asks the background service to refresh now. The old snapshot stays in place until that refresh succeeds. The method name is kept for compatibility.
 - Flag changes typically reach your app within the configured interval plus the time taken by the next refresh (up to 30 seconds), assuming the API responds successfully. Use a shorter interval for apps that rely on kill-switch flags.
@@ -145,9 +146,36 @@ Service registration wires up:
 
 Flags use Microsoft's built-in `Microsoft.Targeting` and `Microsoft.TimeWindow` filters. Custom filters defined in the dashboard receive their `parameters` under their own names (for example `Level`), exactly as in a plain `appsettings.json`.
 
+### Targeting users and groups
+
+A targeting filter can turn a flag on for named users, for named groups, or for a percentage of everyone else, and can exclude users and groups. Groups can each have their own rollout percentage. All of it is evaluated in your app by Microsoft's Targeting filter, using a *targeting context* with a user id and a list of groups.
+
+By default `.WithTargeting()` builds that context from the current request:
+
+- The user id is `User.Identity.Name`.
+- The groups are the user's **role claims**. If a user has the roles `Beta` and `Staff`, a targeting filter that targets the group `Beta` applies to them. Group names are case-sensitive.
+
+To take the user id or groups from somewhere else, such as a tenant id claim or a database lookup, register your own `ITargetingContextAccessor`:
+
+```csharp
+public class AppTargetingContextAccessor(IHttpContextAccessor httpContextAccessor) : ITargetingContextAccessor {
+	public ValueTask<TargetingContext> GetContextAsync() {
+		var user = httpContextAccessor.HttpContext?.User;
+		return ValueTask.FromResult(new TargetingContext {
+			UserId = user?.Identity?.Name,
+			Groups = user?.FindAll("tenant").Select(x => x.Value) ?? []
+		});
+	}
+}
+
+builder.Services.AddSingleton<ITargetingContextAccessor, AppTargetingContextAccessor>();
+```
+
+If you would rather pass the context when you check a flag, which is useful in background jobs with no request, call `IFeatureManager.IsEnabledAsync("MyFlag", new TargetingContext { UserId = "...", Groups = [...] })`. The same flag definitions work either way, because both ways read the same Targeting filter settings.
+
 ### Percentage rollouts
 
-A percentage flag is served as Microsoft's Targeting filter with a `DefaultRolloutPercentage`. Microsoft's filter hashes the user id together with the feature name, so:
+A targeting filter's rollout percentage is served as Microsoft's Targeting filter `DefaultRolloutPercentage`. Microsoft's filter hashes the user id together with the feature name, so:
 
 - Each user stays in or out of the rollout on every request, and the rollout size matches the configured percentage.
 - Different flags bucket the same user differently, so one rollout doesn't always pick the same users.

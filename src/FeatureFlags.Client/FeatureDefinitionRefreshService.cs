@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -12,6 +13,7 @@ namespace Acmi.FeatureFlags.Client;
 /// <remarks>
 /// Definitions are fetched at startup and then every <c>FeatureFlags:CacheExpirationInMinutes</c> (default 15).
 /// Readers use the current snapshot and never wait on HTTP. A failed refresh keeps the last-known-good snapshot.
+/// Refreshes send the snapshot's <c>ETag</c> back in <c>If-None-Match</c>, so an unchanged set of flags costs the API an empty <c>304</c> response.
 /// If no refresh has ever succeeded (for example the API is down at startup), there is no snapshot and flags evaluate off.
 /// </remarks>
 public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<FeatureDefinitionRefreshService> logger,
@@ -126,12 +128,21 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
             using var timeoutSource = new CancellationTokenSource(_RequestTimeout, _TimeProvider);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
 
+            var current = Volatile.Read(ref _Snapshot);
             var httpClient = _HttpClientFactory.CreateClient(Constants.HttpClientName);
-            using var response = await httpClient.GetAsync(Constants.FeaturesPath, timeout.Token);
-            response.EnsureSuccessStatusCode();
+            using var request = new HttpRequestMessage(HttpMethod.Get, Constants.FeaturesPath);
+            if (current?.ETag is not null) {
+                request.Headers.TryAddWithoutValidation("If-None-Match", current.ETag);
+            }
+            using var response = await httpClient.SendAsync(request, timeout.Token);
 
-            var definitions = await ParseDefinitionsAsync(response.Content, timeout.Token);
-            Volatile.Write(ref _Snapshot, new Snapshot(definitions));
+            // nothing changed since the snapshot was taken, so it stays as it is. A 304 is only expected when we sent an ETag.
+            if (response.StatusCode != HttpStatusCode.NotModified || current is null) {
+                response.EnsureSuccessStatusCode();
+
+                var definitions = await ParseDefinitionsAsync(response.Content, timeout.Token);
+                Volatile.Write(ref _Snapshot, new Snapshot(definitions, response.Headers.ETag?.ToString()));
+            }
 
             if (Interlocked.Exchange(ref _ConsecutiveFailures, 0) > 0) {
                 _Logger.LogInformation("Feature definition refresh recovered");
@@ -204,8 +215,9 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
 
     // immutable once built; swapped atomically
     private sealed class Snapshot {
-        public Snapshot(FeatureDefinition[] definitions) {
+        public Snapshot(FeatureDefinition[] definitions, string? eTag) {
             Definitions = definitions;
+            ETag = eTag;
             var byName = new Dictionary<string, FeatureDefinition>(StringComparer.OrdinalIgnoreCase);
             foreach (var definition in definitions) {
                 byName.TryAdd(definition.Name, definition);
@@ -214,6 +226,7 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
         }
 
         public IReadOnlyList<FeatureDefinition> Definitions { get; }
+        public string? ETag { get; }
         public FrozenDictionary<string, FeatureDefinition> ByName { get; }
     }
 }

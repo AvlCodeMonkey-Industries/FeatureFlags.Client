@@ -1,4 +1,6 @@
 using System.Net;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -72,14 +74,69 @@ public class FeatureDefinitionParsingTests {
         return (service, handler);
     }
 
-    private static IFeatureManager CreateManager(FeatureDefinitionRefreshService service) {
+    private static IFeatureManager CreateManager(FeatureDefinitionRefreshService service, ClaimsPrincipal? user = null) {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddHttpContextAccessor();
+        if (user is not null) {
+            services.AddSingleton<IHttpContextAccessor>(new HttpContextAccessor { HttpContext = new DefaultHttpContext { User = user } });
+        }
         services.AddFeatureManagement().AddFeatureFilter<LevelFilter>().WithTargeting();
         services.RemoveAll<IFeatureDefinitionProvider>();
         services.AddSingleton<IFeatureDefinitionProvider>(new StubProvider(service.GetDefinitions()));
         return services.BuildServiceProvider().GetRequiredService<IFeatureManager>();
+    }
+
+    private const string _GroupsJson = """
+        {
+          "feature_management": {
+            "feature_flags": [
+              {
+                "id": "groups",
+                "enabled": true,
+                "conditions": {
+                  "client_filters": [
+                    { "name": "Microsoft.Targeting", "parameters": { "Audience": {
+                      "Users": [],
+                      "DefaultRolloutPercentage": 0,
+                      "Groups": [ { "Name": "Beta", "RolloutPercentage": 100 } ],
+                      "Exclusion": { "Groups": ["Banned"] } } } }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+        """;
+
+    [Theory]
+    [InlineData("Beta", true)]
+    [InlineData("beta", false)] // group names are case-sensitive
+    [InlineData("Staff", false)]
+    public async Task Groups_ComeFromTheRoleClaimsOfTheCurrentUserByDefault(string role, bool expected) {
+        var (service, _) = await RefreshAsync(_GroupsJson);
+        var user = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "alice"), new Claim(ClaimTypes.Role, role)], "test"));
+        var manager = CreateManager(service, user);
+
+        Assert.Equal(expected, await manager.IsEnabledAsync("groups"));
+    }
+
+    [Fact]
+    public async Task Groups_ExcludedGroupsWinOverTargetedGroups() {
+        var (service, _) = await RefreshAsync(_GroupsJson);
+        var user = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "alice"), new Claim(ClaimTypes.Role, "Beta"), new Claim(ClaimTypes.Role, "Banned")], "test"));
+        var manager = CreateManager(service, user);
+
+        Assert.False(await manager.IsEnabledAsync("groups"));
+    }
+
+    [Fact]
+    public async Task Groups_CanBePassedExplicitlyInsteadOfThroughTheAccessor() {
+        var (service, _) = await RefreshAsync(_GroupsJson);
+        var manager = CreateManager(service);
+
+        Assert.True(await manager.IsEnabledAsync("groups", new TargetingContext { UserId = "alice", Groups = ["Beta"] }));
+        Assert.False(await manager.IsEnabledAsync("groups", new TargetingContext { UserId = "alice", Groups = ["Staff"] }));
     }
 
     [Fact]
