@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Globalization;
 using System.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -11,7 +12,7 @@ namespace Acmi.FeatureFlags.Client;
 /// Hosted service that keeps an in-memory snapshot of feature definitions up to date.
 /// </summary>
 /// <remarks>
-/// Definitions are fetched at startup and then every <c>FeatureFlags:CacheExpirationInMinutes</c> (default 15).
+/// Definitions are fetched at startup and then every <c>FeatureFlags:CacheExpirationInMinutes</c> (default 15, minimum 1).
 /// Readers use the current snapshot and never wait on HTTP. A failed refresh keeps the last-known-good snapshot.
 /// Refreshes send the snapshot's <c>ETag</c> back in <c>If-None-Match</c>, so an unchanged set of flags costs the API an empty <c>304</c> response.
 /// If no refresh has ever succeeded (for example the API is down at startup), there is no snapshot and flags evaluate off.
@@ -19,7 +20,6 @@ namespace Acmi.FeatureFlags.Client;
 public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<FeatureDefinitionRefreshService> logger,
     TimeProvider? timeProvider = null) : BackgroundService {
 
-    private const double _DefaultRefreshMinutes = 15;
     private static readonly TimeSpan _StartupWait = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan _RequestTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan _MinimumRefreshGap = TimeSpan.FromSeconds(5);
@@ -35,6 +35,9 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
     private readonly TaskCompletionSource _InitialRefreshCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private Snapshot? _Snapshot;
+    // only the background loop reads the interval, so these need no synchronization
+    private TimeSpan _RefreshInterval = TimeSpan.FromMinutes(Constants.DefaultRefreshMinutes);
+    private string? _RejectedRefreshValue;
     private int _ConsecutiveFailures;
     private long _LastWarningTimestamp;
 
@@ -171,16 +174,59 @@ public sealed class FeatureDefinitionRefreshService(IHttpClientFactory httpClien
         return [.. definitions];
     }
 
-    private TimeSpan RefreshInterval {
-        get {
-            var minutes = _Configuration.GetValue("FeatureFlags:CacheExpirationInMinutes", _DefaultRefreshMinutes);
-            return TimeSpan.FromMinutes(minutes > 0 ? minutes : _DefaultRefreshMinutes);
+    /// <summary>
+    /// Shortest refresh interval the background loop accepts. Tests lower it so they don't wait minutes.
+    /// </summary>
+    internal TimeSpan MinimumRefreshInterval { get; init; } = TimeSpan.FromMinutes(Constants.MinimumRefreshMinutes);
+
+    /// <summary>
+    /// Parses a configured refresh interval, in minutes.
+    /// </summary>
+    /// <param name="value">Configured value.</param>
+    /// <param name="minimum">Shortest interval allowed.</param>
+    /// <param name="interval">Parsed interval when valid.</param>
+    /// <returns>True if the value is a finite number of minutes, at least <paramref name="minimum"/>, that a wait can use; else false.</returns>
+    internal static bool TryParseRefreshInterval(string? value, TimeSpan minimum, out TimeSpan interval) {
+        interval = default;
+        // waits take at most int.MaxValue milliseconds
+        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var minutes) || !double.IsFinite(minutes) ||
+            minutes <= 0 || minutes > int.MaxValue / (double)TimeSpan.MillisecondsPerMinute) {
+            return false;
         }
+
+        interval = TimeSpan.FromMinutes(minutes);
+        return interval >= minimum && interval.TotalMilliseconds <= int.MaxValue;
+    }
+
+    /// <summary>
+    /// Gets the refresh interval from configuration.
+    /// </summary>
+    /// <remarks>
+    /// Configuration can reload while the app runs. A missing value means the default. A value that would fail startup validation is
+    /// logged once and ignored, keeping the last valid interval, so a bad edit never stops the refresh loop.
+    /// </remarks>
+    internal TimeSpan GetRefreshInterval() {
+        var value = _Configuration[Constants.RefreshIntervalKey];
+        if (value is null) {
+            _RejectedRefreshValue = null;
+            return _RefreshInterval = TimeSpan.FromMinutes(Constants.DefaultRefreshMinutes);
+        }
+        if (TryParseRefreshInterval(value, MinimumRefreshInterval, out var interval)) {
+            _RejectedRefreshValue = null;
+            return _RefreshInterval = interval;
+        }
+
+        if (value != _RejectedRefreshValue) {
+            _RejectedRefreshValue = value;
+            _Logger.LogWarning("Ignoring invalid {ConfigurationKey} value {Value}; keeping the refresh interval at {Interval}.",
+                Constants.RefreshIntervalKey, value, _RefreshInterval);
+        }
+        return _RefreshInterval;
     }
 
     // normal interval when healthy; while failing, retry with exponential backoff capped at the normal interval
     private TimeSpan NextDelay() {
-        var interval = RefreshInterval;
+        var interval = GetRefreshInterval();
         var failures = Volatile.Read(ref _ConsecutiveFailures);
         if (failures == 0) {
             return interval;

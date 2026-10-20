@@ -5,16 +5,18 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Acmi.FeatureFlags.Client</RootNamespace>
     <Product>Acmi.FeatureFlags.Client</Product>
-    <AssemblyVersion>2.0.0.7</AssemblyVersion>
+    <AssemblyVersion>2.1.0.0</AssemblyVersion>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ReportAnalyzer>true</ReportAnalyzer>
     <PackageId>Acmi.FeatureFlags.Client</PackageId>
     <Version>$(AssemblyVersion)</Version>
-    <Description>Client library for retrieving remote feature flag definitions and integrating with Microsoft Feature Management.</Description>
+    <Description>Client for FeatureFlags.app, a hosted dashboard for Microsoft.FeatureManagement. Keep your IFeatureManager, [FeatureGate], and &lt;feature&gt; tag helper code, change flags without redeploying, and skip the Azure subscription.</Description>
     <Authors>avlcodemonkey</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/avlcodemonkey/FeatureFlags.Client</RepositoryUrl>
+    <PackageProjectUrl>https://featureflags.app/</PackageProjectUrl>
+    <PackageTags>feature-flags;featureflags;feature-toggles;feature-management;featuremanagement;Microsoft.FeatureManagement;aspnetcore;targeting;rollout</PackageTags>
+    <RepositoryUrl>https://github.com/AvlCodeMonkey-Industries/FeatureFlags.Client</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
@@ -23,5 +25,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="FeatureFlags.Client.Tests" />
   </ItemGroup>
 </Project>
