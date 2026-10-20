@@ -18,4 +18,19 @@ public static class Constants {
     /// Represents the name of the HTTP header used for API key authentication.
     /// </summary>
     public const string ApiKeyHeaderName = "x-api-key";
+
+    /// <summary>
+    /// Configuration key for the refresh interval, in minutes.
+    /// </summary>
+    internal const string RefreshIntervalKey = "FeatureFlags:CacheExpirationInMinutes";
+
+    /// <summary>
+    /// Refresh interval, in minutes, used when <see cref="RefreshIntervalKey"/> isn't set.
+    /// </summary>
+    internal const double DefaultRefreshMinutes = 15;
+
+    /// <summary>
+    /// Shortest refresh interval allowed, in minutes.
+    /// </summary>
+    internal const double MinimumRefreshMinutes = 1;
 }

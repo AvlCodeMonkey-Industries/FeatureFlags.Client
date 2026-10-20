@@ -93,14 +93,20 @@ public class FeatureDefinitionRefreshServiceTests {
         return response;
     }
 
-    private FeatureDefinitionRefreshService CreateService(StubHandler handler, TimeProvider? timeProvider = null, string minutes = "15") {
+    private FeatureDefinitionRefreshService CreateService(StubHandler handler, TimeProvider? timeProvider = null, string? minutes = "15",
+        TimeSpan? minimumInterval = null)
+        => CreateService(handler, CreateConfiguration(minutes), timeProvider, minimumInterval);
+
+    private FeatureDefinitionRefreshService CreateService(StubHandler handler, IConfiguration configuration, TimeProvider? timeProvider = null,
+        TimeSpan? minimumInterval = null) {
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient(Constants.HttpClientName)).Returns(() => new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://localhost/") });
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { { "FeatureFlags:CacheExpirationInMinutes", minutes } })
-            .Build();
-        return new FeatureDefinitionRefreshService(factory.Object, configuration, _LoggerMock.Object, timeProvider);
+        var minimum = minimumInterval ?? TimeSpan.FromMinutes(Constants.MinimumRefreshMinutes);
+        return new FeatureDefinitionRefreshService(factory.Object, configuration, _LoggerMock.Object, timeProvider) { MinimumRefreshInterval = minimum };
     }
+
+    private static IConfigurationRoot CreateConfiguration(string? minutes)
+        => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { { Constants.RefreshIntervalKey, minutes } }).Build();
 
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null) {
         var deadline = DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(10));
@@ -294,12 +300,68 @@ public class FeatureDefinitionRefreshServiceTests {
     [Fact]
     public async Task HostedService_RefreshesOnInterval() {
         var handler = new StubHandler(_ => Task.FromResult(Ok("A")));
-        var service = CreateService(handler, minutes: "0.0002");
+        // lowered minimum lets the interval be short enough to observe
+        var service = CreateService(handler, minutes: "0.0002", minimumInterval: TimeSpan.Zero);
 
         await service.StartAsync(TestContext.Current.CancellationToken);
         await WaitUntilAsync(() => handler.Calls >= 3, TimeSpan.FromSeconds(20));
         await service.StopAsync(TestContext.Current.CancellationToken);
     }
+
+    [Theory]
+    [InlineData("1", 1)]
+    [InlineData("1.5", 1.5)]
+    [InlineData("15", 15)]
+    [InlineData(null, 15)]
+    public void GetRefreshInterval_ReturnsConfiguredOrDefaultInterval(string? minutes, double expected) {
+        var service = CreateService(new StubHandler(_ => Task.FromResult(Ok("A"))), minutes: minutes);
+
+        Assert.Equal(TimeSpan.FromMinutes(expected), service.GetRefreshInterval());
+        VerifyWarnings(Times.Never());
+    }
+
+    [Theory]
+    [InlineData("0.5")]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("abc")]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("1e6")]
+    public void GetRefreshInterval_InvalidReloadedValue_KeepsLastValidInterval(string minutes) {
+        // reloaded configuration skips startup validation, so the service must reject bad values itself
+        var configuration = CreateConfiguration("2");
+        var service = CreateService(new StubHandler(_ => Task.FromResult(Ok("A"))), configuration);
+        Assert.Equal(TimeSpan.FromMinutes(2), service.GetRefreshInterval());
+
+        configuration[Constants.RefreshIntervalKey] = minutes;
+
+        Assert.Equal(TimeSpan.FromMinutes(2), service.GetRefreshInterval());
+        Assert.Equal(TimeSpan.FromMinutes(2), service.GetRefreshInterval());
+        VerifyWarnings(Times.Once());
+    }
+
+    [Fact]
+    public void GetRefreshInterval_ValidValueAfterInvalid_IsUsed() {
+        var configuration = CreateConfiguration("2");
+        var service = CreateService(new StubHandler(_ => Task.FromResult(Ok("A"))), configuration);
+        service.GetRefreshInterval();
+
+        configuration[Constants.RefreshIntervalKey] = "abc";
+        service.GetRefreshInterval();
+        configuration[Constants.RefreshIntervalKey] = "5";
+
+        Assert.Equal(TimeSpan.FromMinutes(5), service.GetRefreshInterval());
+    }
+
+    [Theory]
+    [InlineData("1", true)]
+    [InlineData("35791.39", true)]
+    [InlineData("0.999", false)]
+    [InlineData("35791.4", false)]
+    [InlineData("1,5", false)]
+    public void TryParseRefreshInterval_EnforcesMinimumAndMaximum(string minutes, bool expected)
+        => Assert.Equal(expected, FeatureDefinitionRefreshService.TryParseRefreshInterval(minutes, TimeSpan.FromMinutes(1), out _));
 
     [Fact]
     public async Task ClearCache_TriggersImmediateRefresh() {

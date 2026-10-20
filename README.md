@@ -74,7 +74,7 @@ Required keys:
 
 Optional key:
 
-- `FeatureFlags:CacheExpirationInMinutes` (default: `15`)
+- `FeatureFlags:CacheExpirationInMinutes` (default: `15`, minimum: `1`). Fractions are allowed (`1.5` is 90 seconds). `AddFeatureFlags()` throws an `ArgumentException` for a value below 1 or one that isn't a number. If a reloaded configuration sets an invalid value while the app runs, the client logs a warning and keeps its previous interval.
 
 ## Using Flags In Code
 
@@ -117,7 +117,7 @@ Also works with the normal ASP.NET Core feature management integrations:
 - Each refresh sends the snapshot's `ETag` in `If-None-Match`. While your flags haven't changed, the API answers with an empty `304 Not Modified` and the snapshot stays as it is.
 - If a refresh fails (timeout, network error, 5xx, 401/403), the last-known-good snapshot stays in place and the refresh is retried with exponential backoff (see "Failure Semantics").
 - `IFeatureFlagClient.ClearCache()` asks the background service to refresh now. The old snapshot stays in place until that refresh succeeds. The method name is kept for compatibility.
-- Flag changes typically reach your app within the configured interval plus the time taken by the next refresh (up to 30 seconds), assuming the API responds successfully. Use a shorter interval for apps that rely on kill-switch flags.
+- Flag changes typically reach your app within the configured interval plus the time taken by the next refresh (up to 30 seconds), assuming the API responds successfully. Use a shorter interval, down to the 1-minute minimum, for apps that rely on kill-switch flags.
 
 Example:
 
@@ -238,7 +238,7 @@ Cause:
 
 Fix:
 
-- Lower `CacheExpirationInMinutes` for development, or for apps that rely on kill-switch flags.
+- Lower `CacheExpirationInMinutes` (minimum `1`) for development, or for apps that rely on kill-switch flags.
 - Call `IFeatureFlagClient.ClearCache()` to ask for a refresh now. It returns without waiting, and the new values appear once the refresh completes.
 
 ## Local Validation

@@ -45,22 +45,42 @@ public class ExtensionsTests {
     [InlineData("Infinity")]
     [InlineData("0")]
     [InlineData("-1")]
+    [InlineData("0.5")]
+    [InlineData("0.999")]
     [InlineData("1e300")]
     [InlineData("35791.3942")]
     public void AddFeatureFlags_ThrowsIfCacheExpirationIntervalIsInvalid(string minutes) {
         // Arrange
-        var configurationManager = new ConfigurationManager();
-        configurationManager.AddInMemoryCollection(new Dictionary<string, string?> {
-            { "FeatureFlags:ApiBaseEndpoint", "https://api.example.com" },
-            { "FeatureFlags:ApiKey", "valid-key" },
-            { "FeatureFlags:CacheExpirationInMinutes", minutes }
-        });
-        var builderMock = new Mock<IHostApplicationBuilder>();
-        builderMock.SetupGet(b => b.Configuration).Returns(configurationManager);
+        var builderMock = CreateBuilderWithInterval(minutes);
 
         // Act & Assert
         var ex = Assert.Throws<ArgumentException>(() => Extensions.AddFeatureFlags(builderMock.Object));
-        Assert.Contains("CacheExpirationInMinutes", ex.Message);
+        Assert.Contains(Constants.RefreshIntervalKey, ex.Message);
+    }
+
+    [Theory]
+    [InlineData("1")]
+    [InlineData("1.5")]
+    [InlineData("15")]
+    public void AddFeatureFlags_AcceptsCacheExpirationIntervalOfAtLeastOneMinute(string minutes) {
+        // Arrange
+        var builderMock = CreateBuilderWithInterval(minutes);
+
+        // Act & Assert
+        Assert.Same(builderMock.Object, Extensions.AddFeatureFlags(builderMock.Object));
+    }
+
+    private static Mock<IHostApplicationBuilder> CreateBuilderWithInterval(string minutes) {
+        var configurationManager = new ConfigurationManager();
+        configurationManager.AddInMemoryCollection(new Dictionary<string, string?> {
+            { "FeatureFlags:ApiBaseEndpoint", "https://api.example.com/" },
+            { "FeatureFlags:ApiKey", "valid-key" },
+            { Constants.RefreshIntervalKey, minutes }
+        });
+        var builderMock = new Mock<IHostApplicationBuilder>();
+        builderMock.SetupGet(b => b.Configuration).Returns(configurationManager);
+        builderMock.SetupGet(b => b.Services).Returns(new ServiceCollection());
+        return builderMock;
     }
 
     [Fact]
