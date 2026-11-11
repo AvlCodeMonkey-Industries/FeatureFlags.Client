@@ -115,7 +115,7 @@ Also works with the normal ASP.NET Core feature management integrations:
 - Flag checks read the current snapshot. Evaluation never waits on an HTTP call.
 - The snapshot is swapped atomically after each successful refresh.
 - Each refresh sends the snapshot's `ETag` in `If-None-Match`. While your flags haven't changed, the API answers with an empty `304 Not Modified` and the snapshot stays as it is.
-- If a refresh fails (timeout, network error, 5xx, 401/403), the last-known-good snapshot stays in place and the refresh is retried with exponential backoff (see "Failure Semantics").
+- If a refresh fails (timeout, network error, 5xx, 401/403, or 402 when your organization is over its plan's flag limit), the last-known-good snapshot stays in place and the refresh is retried with exponential backoff (see "Failure Semantics").
 - `IFeatureFlagClient.ClearCache()` asks the background service to refresh now. The old snapshot stays in place until that refresh succeeds. The method name is kept for compatibility.
 - Flag changes typically reach your app within the configured interval plus the time taken by the next refresh (up to 30 seconds), assuming the API responds successfully. Use a shorter interval, down to the 1-minute minimum, for apps that rely on kill-switch flags.
 
@@ -189,6 +189,8 @@ When a refresh fails:
 - The last-known-good definitions keep being served, and the refresh is retried with exponential backoff (2, 4, 8 seconds and so on, capped at the normal interval) rather than waiting out the full interval. Refreshes are never closer than 5 seconds apart, even if `ClearCache()` is called repeatedly.
 - A log message is written when refreshes recover.
 
+**Over the plan limit:** while your organization has more flags than its plan allows, including after a paid subscription ends and it moves to the free plan, the API returns `402 Payment Required`. The client treats that like any other failed refresh, so the flags it already loaded stay in place rather than all turning off. Upgrading the plan or deleting flags brings refreshes back on the next attempt.
+
 **Cold start with the API down:** if the app starts while FeatureFlags.app is unreachable (or the API key is invalid), no snapshot exists yet. `GetAllFeatureDefinitionsAsync()` returns an empty list, `GetFeatureDefinitionByNameAsync()` returns `null`, and all flags evaluate off until the first successful fetch. Nothing is thrown into the request pipeline.
 
 ## Common Issues And Fixes
@@ -211,6 +213,7 @@ Possible causes:
 
 - API key invalid or missing permissions.
 - The API was unreachable the whole time since the app started, so no definitions have been loaded (see "Cold start" above).
+- The app started while your organization was over its plan's flag limit, so the API returned `402 Payment Required` (see "Over the plan limit" above).
 - Flag name mismatch (`"NewDashboard"` vs `"NewDashbaord"`, yes this typo happens a lot).
 
 Fix:
