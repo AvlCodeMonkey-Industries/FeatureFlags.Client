@@ -293,6 +293,3 @@ __pycache__/
 
 # App databases
 AppData/
-
-# Ignore sonarqube files
-.scannerwork

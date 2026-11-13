@@ -1,4 +1,4 @@
-# Build, test, and scan solution
+# Build and test solution
 name: Main
 
 on:
@@ -44,22 +44,6 @@ jobs:
         name: DotNet Test Results
         path: '**/*.trx'
         reporter: dotnet-trx
-
-  # only run sonarqube on pull requests, not on a push into `main`
-  scan:
-    name: SonarQube Scan
-    runs-on: ubuntu-latest
-    if: github.ref_name != 'main' && github.head_ref != 'main'
-
-    steps:
-    - uses: actions/checkout@v7.0.1
-      with:
-        fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
-
-    - name: SonarQube Scan
-      uses: SonarSource/sonarqube-scan-action@v8.4.1
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   # runs only when other jobs succeed and it's a push into `main`
   release:
